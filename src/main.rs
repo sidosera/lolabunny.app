@@ -305,7 +305,7 @@ struct CommandRow {
 
 #[cfg(feature = "cli")]
 fn print_commands() {
-    let mut commands = BunnylolCommandRegistry::get_all_commands().clone();
+    let mut commands = BunnylolCommandRegistry::get_all_commands_with_plugins();
     commands.sort_by(|a, b| {
         a.bindings[0]
             .to_lowercase()

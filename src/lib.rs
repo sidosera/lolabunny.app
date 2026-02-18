@@ -9,6 +9,7 @@ pub mod bunnylol_command_registry;
 pub mod commands;
 pub mod config;
 pub mod history;
+pub mod plugins;
 pub mod utils;
 
 // Server module is needed for both server runtime and CLI service management
@@ -20,6 +21,6 @@ pub mod server;
 pub use server::service;
 
 pub use bunnylol_command_registry::BunnylolCommandRegistry;
-pub use commands::bunnylol_command::{BunnylolCommand, BunnylolCommandInfo};
+pub use commands::bunnylol_command::BunnylolCommandInfo;
 pub use config::BunnylolConfig;
 pub use history::{History, HistoryEntry};

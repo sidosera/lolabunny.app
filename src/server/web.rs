@@ -161,7 +161,7 @@ fn BindingCard(binding: BindingData) -> impl IntoView {
 
 #[component]
 pub fn LandingPage(server_display_url: String) -> impl IntoView {
-    let mut bindings: Vec<BindingData> = BunnylolCommandRegistry::get_all_commands()
+    let mut bindings: Vec<BindingData> = BunnylolCommandRegistry::get_all_commands_with_plugins()
         .iter()
         .map(|cmd| (*cmd).clone().into())
         .collect();
