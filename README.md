@@ -4,8 +4,8 @@
 
 # Bunnylol
 
-Command Line for Your Browser Location Bar
-
+Bunnylol is an app that turns your browser location bar into a command line.
+Based on Aaron Lichtman and Joe Previte’s contributions to [bunnylol.rs](https://github.com/facebook/bunnylol.rs) with a strong focus on simplicity and easy setup.
 
 ## Han, why do I need another bookmark manager?
 
