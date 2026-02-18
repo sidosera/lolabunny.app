@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 use leptos::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{BunnylolCommandInfo, BunnylolCommandRegistry, BunnylolConfig};
+use crate::{BunnylolConfig, CommandInfo, plugins};
 
 static LANDING_PAGE_HTML_CACHE: OnceLock<String> = OnceLock::new();
 
@@ -88,8 +88,8 @@ pub struct BindingData {
     pub example: String,
 }
 
-impl From<BunnylolCommandInfo> for BindingData {
-    fn from(info: BunnylolCommandInfo) -> Self {
+impl From<CommandInfo> for BindingData {
+    fn from(info: CommandInfo) -> Self {
         Self {
             command: info
                 .bindings
@@ -161,9 +161,9 @@ fn BindingCard(binding: BindingData) -> impl IntoView {
 
 #[component]
 pub fn LandingPage(server_display_url: String) -> impl IntoView {
-    let mut bindings: Vec<BindingData> = BunnylolCommandRegistry::get_all_commands_with_plugins()
-        .iter()
-        .map(|cmd| (*cmd).clone().into())
+    let mut bindings: Vec<BindingData> = plugins::get_all_commands()
+        .into_iter()
+        .map(|cmd| cmd.into())
         .collect();
 
     // Sort bindings alphabetically by command name

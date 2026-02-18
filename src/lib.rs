@@ -5,22 +5,37 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-pub mod bunnylol_command_registry;
-pub mod commands;
 pub mod config;
 pub mod history;
 pub mod plugins;
 pub mod utils;
 
-// Server module is needed for both server runtime and CLI service management
-#[cfg(any(feature = "server", feature = "cli"))]
+#[cfg(feature = "server")]
 pub mod server;
 
-// Re-export service from server module for CLI feature
-#[cfg(feature = "cli")]
-pub use server::service;
-
-pub use bunnylol_command_registry::BunnylolCommandRegistry;
-pub use commands::bunnylol_command::BunnylolCommandInfo;
 pub use config::BunnylolConfig;
 pub use history::{History, HistoryEntry};
+pub use plugins::CommandInfo;
+
+/// C FFI entry point for embedding the server in a native host (e.g. macOS app).
+/// Blocks the calling thread. Intended to be called from a background thread.
+#[cfg(feature = "server")]
+#[unsafe(no_mangle)]
+pub extern "C" fn bunnylol_serve(port: u16) -> i32 {
+    let mut config = match BunnylolConfig::load() {
+        Ok(cfg) => cfg,
+        Err(_) => BunnylolConfig::default(),
+    };
+    config.server.port = port;
+    config.server.log_level = "off".to_string();
+
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(_) => return 1,
+    };
+
+    match rt.block_on(server::launch(config)) {
+        Ok(()) => 0,
+        Err(_) => 1,
+    }
+}

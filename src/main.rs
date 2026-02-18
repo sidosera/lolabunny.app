@@ -5,14 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 
-// BunnylolConfig is needed by both server and CLI
+#[cfg(feature = "cli")]
+use clap::CommandFactory;
+
 use bunnylol::BunnylolConfig;
 
-// CLI-only imports
 #[cfg(feature = "cli")]
-use bunnylol::{BunnylolCommandRegistry, History, utils};
+use bunnylol::{History, plugins, utils};
 #[cfg(feature = "cli")]
 use clap_complete::generate;
 #[cfg(feature = "cli")]
@@ -67,52 +68,16 @@ enum Commands {
         shell: clap_complete::Shell,
     },
 
-    /// Manage bunnylol service
-    #[cfg(feature = "cli")]
-    Service {
-        #[command(subcommand)]
-        action: ServiceAction,
-    },
-
     /// Execute a bunnylol command
     #[cfg(feature = "cli")]
     #[command(external_subcommand)]
     Command(Vec<String>),
 }
 
-#[cfg(feature = "cli")]
-#[derive(Subcommand)]
-enum ServiceAction {
-    /// Install bunnylol server as a service (uses config file for port/address)
-    Install {
-        /// Allow network access (bind to 0.0.0.0). Default: localhost only (127.0.0.1)
-        #[arg(short, long)]
-        network: bool,
-    },
-    /// Uninstall bunnylol service
-    Uninstall,
-    /// Start the server service
-    Start,
-    /// Stop the server service
-    Stop,
-    /// Restart the server service
-    Restart,
-    /// Show server status
-    Status,
-    /// Show server logs
-    Logs {
-        #[arg(short, long)]
-        follow: bool,
-        #[arg(short = 'n', long, default_value = "20")]
-        lines: u32,
-    },
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    // Load configuration
     let config = match BunnylolConfig::load() {
         Ok(cfg) => cfg,
         Err(e) => {
@@ -122,7 +87,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Handle global --list flag
     #[cfg(feature = "cli")]
     if cli.list {
         print_commands();
@@ -132,7 +96,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         #[cfg(feature = "server")]
         Some(Commands::Serve { port, address }) => {
-            // Override config with command-line arguments if provided
             let mut server_config = config.clone();
             if let Some(p) = port {
                 server_config.server.port = p;
@@ -140,8 +103,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(a) = address {
                 server_config.server.address = a;
             }
-
-            // Launch the server
             bunnylol::server::launch(server_config).await?;
             Ok(())
         }
@@ -160,58 +121,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         #[cfg(feature = "cli")]
-        Some(Commands::Service { action }) => {
-            use bunnylol::service::*;
-
-            let result = match action {
-                ServiceAction::Install { network } => {
-                    // Use ServiceConfig with appropriate address based on --network flag
-                    let service_config = ServiceConfig {
-                        address: if network {
-                            "0.0.0.0".to_string() // Network access
-                        } else {
-                            "127.0.0.1".to_string() // Localhost only (secure default)
-                        },
-                        ..Default::default()
-                    };
-
-                    install_systemd_service(service_config)
-                }
-                ServiceAction::Uninstall => uninstall_service(),
-                ServiceAction::Start => start_service(),
-                ServiceAction::Stop => stop_service(),
-                ServiceAction::Restart => restart_service(),
-                ServiceAction::Status => service_status(),
-                ServiceAction::Logs { follow, lines } => service_logs(follow, lines),
-            };
-
-            if let Err(e) = result {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-
-            Ok(())
-        }
-
-        #[cfg(feature = "cli")]
         Some(Commands::Command(args)) => {
             execute_command(args, &config, cli.dry_run)?;
             Ok(())
         }
 
-        // No subcommand provided - treat remaining args as a command to execute
         #[cfg(feature = "cli")]
         None => {
-            // Check if there are any remaining arguments (passed as positional)
             let args: Vec<String> = std::env::args()
                 .skip(1)
                 .filter(|arg| !arg.starts_with('-') && arg != "bunnylol")
                 .collect();
 
             if args.is_empty() {
-                // No command provided, print full help
                 Cli::command().print_help().unwrap();
-                println!(); // Add newline after help
+                println!();
                 std::process::exit(0);
             }
 
@@ -234,27 +158,18 @@ fn execute_command(
     config: &BunnylolConfig,
     dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Special case: "list" should print commands table, not execute as a command
     if args.first().map(|s| s.as_str()) == Some("list") {
         print_commands();
         return Ok(());
     }
 
-    // Join command parts (e.g., ["ig", "reels"] -> "ig reels")
     let full_args = args.join(" ");
-
-    // Resolve command aliases
     let resolved_args = config.resolve_command(&full_args);
-
-    // Extract command and process with config for custom search engine
     let command = utils::get_command_from_query_string(&resolved_args);
-    let url =
-        BunnylolCommandRegistry::process_command_with_config(command, &resolved_args, Some(config));
+    let url = plugins::process_command_with_fallback(command, &resolved_args, Some(config));
 
-    // Print URL
     println!("{}", url);
 
-    // Track command in history if enabled
     if config.history.enabled
         && let Some(history) = History::new(config)
     {
@@ -264,7 +179,6 @@ fn execute_command(
         }
     }
 
-    // Open in browser unless --dry-run
     if !dry_run {
         open_url(&url, config)?;
     }
@@ -275,7 +189,6 @@ fn execute_command(
 #[cfg(feature = "cli")]
 fn open_url(url: &str, config: &BunnylolConfig) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(browser) = &config.browser {
-        // Open with specified browser
         open::with(url, browser).map_err(|e| {
             format!(
                 "Failed to open browser '{}': {}. URL printed above.",
@@ -283,7 +196,6 @@ fn open_url(url: &str, config: &BunnylolConfig) -> Result<(), Box<dyn std::error
             )
         })?;
     } else {
-        // Use system default browser
         open::that(url)
             .map_err(|e| format!("Failed to open browser: {}. URL printed above.", e))?;
     }
@@ -305,7 +217,7 @@ struct CommandRow {
 
 #[cfg(feature = "cli")]
 fn print_commands() {
-    let mut commands = BunnylolCommandRegistry::get_all_commands_with_plugins();
+    let mut commands = plugins::get_all_commands();
     commands.sort_by(|a, b| {
         a.bindings[0]
             .to_lowercase()
@@ -331,15 +243,11 @@ fn print_commands() {
         })
         .collect();
 
-    // Get terminal width and calculate column widths dynamically
     let term_width = terminal_size::terminal_size()
         .map(|(w, _)| w.0 as usize)
-        .unwrap_or(120); // Default to 120 if terminal size unavailable
+        .unwrap_or(120);
 
-    // Use all available width minus 2 for safety
     let available_width = term_width.saturating_sub(2);
-
-    // Calculate widths: Command(15) + Aliases(dynamic) + Description(40-50%) + Example(25-30%)
     let command_width = 15;
     let example_width = (available_width as f32 * 0.25).max(20.0) as usize;
     let description_width = (available_width as f32 * 0.45).max(30.0) as usize;
