@@ -1,4 +1,4 @@
-name: Build macOS ARM64
+name: Build macOS App
 
 on:
   push:
@@ -7,7 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: bunnylol
 
 jobs:
   build:
@@ -18,8 +17,6 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -30,33 +27,23 @@ jobs:
             target
           key: macos-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release binary
-        run: cargo build --release --target aarch64-apple-darwin
-
-      - name: Strip binary
-        run: strip target/aarch64-apple-darwin/release/${{ env.BINARY_NAME }}
+      - name: Build app bundle
+        run: cargo xtask bundle
 
       - name: Get version
         id: version
         run: echo "version=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')" >> $GITHUB_OUTPUT
 
-      - name: Create app bundle
-        run: |
-          APP_DIR="Bunnylol.app/Contents"
-          mkdir -p "$APP_DIR/MacOS" "$APP_DIR/Resources"
-          cp target/aarch64-apple-darwin/release/${{ env.BINARY_NAME }} "$APP_DIR/MacOS/"
-          cp macos-app/Bunnylol.app/Contents/MacOS/bunnylol-launcher "$APP_DIR/MacOS/"
-          chmod +x "$APP_DIR/MacOS/bunnylol-launcher" "$APP_DIR/MacOS/${{ env.BINARY_NAME }}"
-          sed "s/1.0.0/${{ steps.version.outputs.version }}/g" macos-app/Bunnylol.app/Contents/Info.plist > "$APP_DIR/Info.plist"
-
       - name: Create ZIP
-        run: zip -r Bunnylol-${{ steps.version.outputs.version }}-arm64.zip Bunnylol.app
+        run: |
+          cd target/bundle
+          zip -r ../../Bunnylol-${{ steps.version.outputs.version }}-arm64.zip Bunnylol.app
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Bunnylol-macos-arm64
-          path: Bunnylol.app
+          path: target/bundle/Bunnylol.app
           retention-days: 90
 
       - name: Delete existing latest release
@@ -74,10 +61,20 @@ jobs:
             Version: ${{ steps.version.outputs.version }}
             
             ## Installation
+            
+            ```sh
+            # Download and install
+            curl -L https://github.com/sidosera/lolabunny.app/releases/download/latest/Bunnylol-${{ steps.version.outputs.version }}-arm64.zip -o /tmp/bunnylol.zip
+            unzip /tmp/bunnylol.zip -d /Applications
+            open /Applications/Bunnylol.app
+            ```
+            
+            Or manually:
             1. Download `Bunnylol-arm64.zip`
             2. Unzip and move `Bunnylol.app` to `/Applications`
-            3. Add to Login Items: System Settings → General → Login Items → Add Bunnylol
-            4. Set browser search engine to `http://localhost:8085/?cmd=%s`
+            3. Open the app - it will appear in your menu bar
+            4. Click the rabbit icon → "Launch at Login" to enable autostart
+            5. Set browser search engine to `http://localhost:8000/?cmd=%s`
           files: Bunnylol-${{ steps.version.outputs.version }}-arm64.zip
           prerelease: true
           make_latest: true

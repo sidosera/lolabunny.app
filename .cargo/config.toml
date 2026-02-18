@@ -1,4 +1,6 @@
 [alias]
+xtask = "run --package xtask --"
+
 # Build release binaries
 server = "build --release --no-default-features --features server"
 cli = "build --release --no-default-features --features cli"
