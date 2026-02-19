@@ -12,6 +12,19 @@ const ICON_SOURCE: &str = "bunny.png";
 const ICON_SIZE_1X: u32 = 18;
 const ICON_SIZE_2X: u32 = 36;
 
+const APP_ICON_SIZES: &[(u32, &str)] = &[
+    (16, "icon_16x16.png"),
+    (32, "icon_16x16@2x.png"),
+    (32, "icon_32x32.png"),
+    (64, "icon_32x32@2x.png"),
+    (128, "icon_128x128.png"),
+    (256, "icon_128x128@2x.png"),
+    (256, "icon_256x256.png"),
+    (512, "icon_256x256@2x.png"),
+    (512, "icon_512x512.png"),
+    (1024, "icon_512x512@2x.png"),
+];
+
 const SYSTEM_LIBS: &[&str] = &["-lz", "-lm", "-lc++", "-liconv", "-lresolv"];
 const PKGINFO_CONTENT: &[u8] = b"APPL????";
 
@@ -127,6 +140,9 @@ fn bundle() {
     generate_icon(icon_src_str, &resources, ICON_SIZE_1X, "bunny.png");
     generate_icon(icon_src_str, &resources, ICON_SIZE_2X, "bunny@2x.png");
 
+    println!("Generating app icon...");
+    generate_app_icns(icon_src_str, &resources);
+
     println!("Compiling Swift app (linking Rust, target {swift_target})...");
     run(Command::new("swiftc")
         .args(["-O", "-target", &swift_target, "-import-objc-header"])
@@ -150,6 +166,23 @@ fn bundle() {
     println!();
     println!("To run:");
     println!("  open '{}'", app_bundle.display());
+}
+
+fn generate_app_icns(src: &str, resources: &Path) {
+    let iconset = resources.join("AppIcon.iconset");
+    fs::create_dir_all(&iconset).expect("Failed to create iconset dir");
+
+    for &(size, name) in APP_ICON_SIZES {
+        generate_icon(src, &iconset, size, name);
+    }
+
+    run(Command::new("iconutil")
+        .args(["--convert", "icns"])
+        .arg(&iconset)
+        .args(["--output"])
+        .arg(resources.join("AppIcon.icns")));
+
+    fs::remove_dir_all(&iconset).expect("Failed to clean up iconset dir");
 }
 
 fn generate_icon(src: &str, resources: &Path, size: u32, name: &str) {

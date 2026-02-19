@@ -18,6 +18,7 @@ pub struct CommandInfo {
     pub bindings: Vec<String>,
     pub description: String,
     pub example: String,
+    pub origin: String,
 }
 
 #[derive(Debug)]
@@ -26,6 +27,7 @@ struct LuaPlugin {
     description: String,
     example: String,
     source: String,
+    origin: String,
 }
 
 impl LuaPlugin {
@@ -42,6 +44,7 @@ impl LuaPlugin {
             bindings: self.bindings.clone(),
             description: self.description.clone(),
             example: self.example.clone(),
+            origin: self.origin.clone(),
         }
     }
 }
@@ -62,34 +65,56 @@ impl PluginRegistry {
     fn scan_dirs(&mut self) {
         let dirs = [
             Self::user_plugins_dir(),
-            Some(PathBuf::from("/opt/homebrew/etc/bunnylol/commands")),
-            Some(PathBuf::from("/usr/local/etc/bunnylol/commands")),
+            Some(PathBuf::from("/opt/homebrew/share/bunnylol/commands")),
+            Some(PathBuf::from("/usr/local/share/bunnylol/commands")),
         ];
 
         for dir in dirs.into_iter().flatten() {
             if !dir.exists() {
                 continue;
             }
-            let Ok(entries) = fs::read_dir(&dir) else {
-                continue;
-            };
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|ext| ext == "lua") {
-                    if let Some(plugin) = Self::load_plugin(&path) {
-                        for binding in &plugin.bindings {
-                            self.plugins.insert(
-                                binding.clone(),
-                                LuaPlugin {
-                                    bindings: plugin.bindings.clone(),
-                                    description: plugin.description.clone(),
-                                    example: plugin.example.clone(),
-                                    source: plugin.source.clone(),
-                                },
-                            );
-                        }
-                    }
-                }
+            self.scan_dir(&dir);
+        }
+    }
+
+    fn scan_dir(&mut self, dir: &PathBuf) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                self.scan_dir(&path);
+            } else if path.extension().is_some_and(|ext| ext == "lua") {
+                self.register_plugin(&path);
+            }
+        }
+    }
+
+    fn register_plugin(&mut self, path: &PathBuf) {
+        let origin = path
+            .parent()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let origin = if origin == "commands" {
+            "user".to_string()
+        } else {
+            origin
+        };
+
+        if let Some(plugin) = Self::load_plugin(path, &origin) {
+            for binding in &plugin.bindings {
+                self.plugins.insert(
+                    binding.clone(),
+                    LuaPlugin {
+                        bindings: plugin.bindings.clone(),
+                        description: plugin.description.clone(),
+                        example: plugin.example.clone(),
+                        source: plugin.source.clone(),
+                        origin: plugin.origin.clone(),
+                    },
+                );
             }
         }
     }
@@ -103,7 +128,7 @@ impl PluginRegistry {
         Some(path)
     }
 
-    fn load_plugin(path: &PathBuf) -> Option<LuaPlugin> {
+    fn load_plugin(path: &PathBuf, origin: &str) -> Option<LuaPlugin> {
         let source = fs::read_to_string(path).ok()?;
         let lua = Lua::new();
         register_helpers(&lua).ok()?;
@@ -123,6 +148,7 @@ impl PluginRegistry {
             description: info_table.get("description").ok()?,
             example: info_table.get("example").ok()?,
             source,
+            origin: origin.to_string(),
         })
     }
 

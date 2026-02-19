@@ -20,6 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         
         menu.addItem(NSMenuItem(title: "Open Bindings", action: #selector(openBindings), keyEquivalent: "b"))
+        menu.addItem(NSMenuItem(title: "Update Plugins", action: #selector(updatePlugins), keyEquivalent: "u"))
         menu.addItem(NSMenuItem.separator())
         
         let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
@@ -112,6 +113,67 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("Failed to set launch at login: \(error)")
             }
         }
+    }
+    
+    #if arch(arm64)
+    private static let brewPrefix = "/opt/homebrew"
+    #else
+    private static let brewPrefix = "/usr/local"
+    #endif
+    private static let brewPath = brewPrefix + "/bin/brew"
+    private static let pluginDir = brewPrefix + "/share/bunnylol/commands"
+    private static let cellarPrefix = brewPrefix + "/Cellar/"
+
+    @objc private func updatePlugins(_ sender: NSMenuItem) {
+        sender.title = "Updating…"
+        sender.isEnabled = false
+        DispatchQueue.global(qos: .utility).async {
+            let ok = Self.upgradePluginFormulas()
+            DispatchQueue.main.async {
+                sender.title = ok ? "Update Plugins" : "Update Failed"
+                sender.isEnabled = true
+            }
+        }
+    }
+
+    /// Subdirectories under the commands dir are Homebrew-managed formula dirs.
+    /// Resolve any symlink inside them back to the Cellar to get the formula name.
+    private static func installedPluginFormulas() -> [String] {
+        let fm = FileManager.default
+        guard let subdirs = try? fm.contentsOfDirectory(atPath: pluginDir) else { return [] }
+
+        var formulas = Set<String>()
+        for subdir in subdirs {
+            let subdirPath = pluginDir + "/" + subdir
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: subdirPath, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard let files = try? fm.contentsOfDirectory(atPath: subdirPath) else { continue }
+            for file in files {
+                let filePath = subdirPath + "/" + file
+                guard let dest = try? fm.destinationOfSymbolicLink(atPath: filePath),
+                      dest.hasPrefix(cellarPrefix) else { continue }
+                let remainder = dest.dropFirst(cellarPrefix.count)
+                if let slash = remainder.firstIndex(of: "/") {
+                    formulas.insert(String(remainder[remainder.startIndex..<slash]))
+                }
+                break
+            }
+        }
+        return Array(formulas)
+    }
+
+    private static func upgradePluginFormulas() -> Bool {
+        let formulas = installedPluginFormulas()
+        if formulas.isEmpty { return true }
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: brewPath)
+        proc.arguments = ["upgrade", "--fetch-HEAD"] + formulas
+        proc.standardOutput = nil
+        proc.standardError = nil
+        guard (try? proc.run()) != nil else { return false }
+        proc.waitUntilExit()
+        return proc.terminationStatus == 0
     }
     
     @objc private func quit() {

@@ -27,19 +27,20 @@ pub fn render_landing_page_html(config: &BunnylolConfig) -> String {
 
             let mut rows = String::new();
             for cmd in &commands {
-                let name = cmd
+                let nick = cmd
                     .bindings
-                    .first()
-                    .map(|s| s.as_str())
-                    .unwrap_or("(default)");
+                    .iter()
+                    .map(|s| html_escape(s))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 rows.push_str(&format!(
                     "<tr>\
-                        <td class=\"cmd\">{}</td>\
-                        <td>{}</td>\
+                        <td class=\"origin\">{}</td>\
+                        <td class=\"nick\">{}</td>\
                         <td class=\"example\">{}</td>\
                     </tr>\n",
-                    html_escape(name),
-                    html_escape(&cmd.description),
+                    html_escape(&cmd.origin),
+                    nick,
                     html_escape(&cmd.example),
                 ));
             }
@@ -51,10 +52,10 @@ pub fn render_landing_page_html(config: &BunnylolConfig) -> String {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>bunnylol</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐰</text></svg>">
+<link rel="icon" type="image/png" href="data:image/png;base64,{logo}">
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;color:#333;max-width:900px;margin:0 auto;padding:48px 24px}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;color:#333;padding:48px 24px}}
 header{{text-align:center;margin-bottom:48px}}
 header img{{width:80px;height:80px;margin-bottom:12px}}
 header h1{{font-size:1.4em;font-weight:600;margin-bottom:4px}}
@@ -63,7 +64,8 @@ table{{width:100%;border-collapse:collapse;font-size:.88em}}
 th{{text-align:left;padding:6px 12px;border-bottom:2px solid #e0e0e0;font-weight:600;color:#666;font-size:.75em;text-transform:uppercase;letter-spacing:.05em}}
 td{{padding:7px 12px;border-bottom:1px solid #f0f0f0;vertical-align:top}}
 tr:hover{{background:#fafafa}}
-.cmd{{font-family:'SF Mono',Menlo,Consolas,monospace;font-weight:600;white-space:nowrap}}
+.origin{{color:#999;font-size:.85em}}
+.nick{{font-family:'SF Mono',Menlo,Consolas,monospace;font-weight:600;white-space:nowrap}}
 .example{{font-family:'SF Mono',Menlo,Consolas,monospace;color:#999;font-size:.9em}}
 </style>
 </head>
@@ -74,7 +76,7 @@ tr:hover{{background:#fafafa}}
 <p>{display_url}</p>
 </header>
 <table>
-<thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead>
+<thead><tr><th>Origin</th><th>Nick</th><th>Example</th></tr></thead>
 <tbody>
 {rows}</tbody>
 </table>

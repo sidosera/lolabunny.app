@@ -7,13 +7,11 @@
 Turn your browser location bar into a command line.
 </p>
 
----
 
 Bunnylol is a lightweight local command router that lets you navigate apps, tools, and internal resources directly from your browser address bar.
 
 Inspired by [bunnylol.rs](https://github.com/facebook/bunnylol.rs), Aaron Lichtman and Joe Previte’s port of [Facebook’s original tool](https://www.quora.com/profile/Charlie-Cheever), with an emphasis on simplicity and zero-friction setup.
 
----
 
 ## Install
 
@@ -25,7 +23,7 @@ Or using Homebrew
 
 
 ```sh
-brew tap sidosera/lolabunny
+brew tap sidosera/lolacore
 brew install --cask bunnylol
 brew install lola-core
 ```
@@ -37,7 +35,6 @@ git clone https://github.com/sidosera/lolabunny.app.git && cd lolabunny.app
 cargo xtask bundle && cp -r target/Bunnylol.app /Applications/
 ```
 
----
 
 ## Setup
 
@@ -49,7 +46,6 @@ three. Set your browser search engine to:
 http://localhost:8085/?cmd=%s
 ```
 
----
 
 ## Plugins
 
@@ -85,7 +81,6 @@ Install core commands:
 brew install lola-core
 ```
 
----
 
 ## Config
 
@@ -100,17 +95,8 @@ default_search = "google"
 port = 8085
 ```
 
----
-
-## Developing
-
-```
-cargo xtask bundle
-```
-
 
 ## License
 
 MIT
 
----
