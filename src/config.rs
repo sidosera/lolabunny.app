@@ -160,7 +160,7 @@ fn default_max_entries() -> usize {
 }
 
 fn default_port() -> u16 {
-    8000
+    8085
 }
 
 fn default_address() -> String {
@@ -391,7 +391,7 @@ mod tests {
         assert!(config.aliases.is_empty());
         assert!(config.history.enabled);
         assert_eq!(config.history.max_entries, 1000);
-        assert_eq!(config.server.port, 8000);
+        assert_eq!(config.server.port, 8085);
         assert_eq!(config.server.address, "127.0.0.1");
         assert_eq!(config.server.log_level, "normal");
         assert_eq!(config.server.server_display_url, None);
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn test_server_config_defaults() {
         let config = ServerConfig::default();
-        assert_eq!(config.port, 8000);
+        assert_eq!(config.port, 8085);
         assert_eq!(config.address, "127.0.0.1");
         assert_eq!(config.log_level, "normal");
     }
@@ -503,14 +503,14 @@ mod tests {
     #[test]
     fn test_get_display_url_with_http() {
         let mut config = ServerConfig::default();
-        config.server_display_url = Some("http://localhost:8000".to_string());
-        assert_eq!(config.get_display_url(), "http://localhost:8000");
+        config.server_display_url = Some("http://localhost:8085".to_string());
+        assert_eq!(config.get_display_url(), "http://localhost:8085");
     }
 
     #[test]
     fn test_get_display_url_fallback() {
         let config = ServerConfig::default();
-        assert_eq!(config.get_display_url(), "http://localhost:8000");
+        assert_eq!(config.get_display_url(), "http://localhost:8085");
 
         let mut config2 = ServerConfig::default();
         config2.port = 9000;
@@ -534,8 +534,8 @@ mod tests {
     #[test]
     fn test_get_display_url_localhost_with_port() {
         let mut config = ServerConfig::default();
-        config.server_display_url = Some("localhost:8000".to_string());
-        assert_eq!(config.get_display_url(), "http://localhost:8000");
+        config.server_display_url = Some("localhost:8085".to_string());
+        assert_eq!(config.get_display_url(), "http://localhost:8085");
     }
 
     #[test]
@@ -548,15 +548,15 @@ mod tests {
     #[test]
     fn test_get_display_url_127_0_0_1_with_port() {
         let mut config = ServerConfig::default();
-        config.server_display_url = Some("127.0.0.1:8000".to_string());
-        assert_eq!(config.get_display_url(), "http://127.0.0.1:8000");
+        config.server_display_url = Some("127.0.0.1:8085".to_string());
+        assert_eq!(config.get_display_url(), "http://127.0.0.1:8085");
     }
 
     #[test]
     fn test_get_display_url_0_0_0_0() {
         let mut config = ServerConfig::default();
-        config.server_display_url = Some("0.0.0.0:8000".to_string());
-        assert_eq!(config.get_display_url(), "http://0.0.0.0:8000");
+        config.server_display_url = Some("0.0.0.0:8085".to_string());
+        assert_eq!(config.get_display_url(), "http://0.0.0.0:8085");
     }
 
     #[test]
@@ -564,7 +564,7 @@ mod tests {
     fn test_parse_server_display_url_from_toml() {
         let toml_str = r#"
             [server]
-            port = 8000
+            port = 8085
             address = "0.0.0.0"
             log_level = "normal"
             server_display_url = "bunny.alichtman.com"

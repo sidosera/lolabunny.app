@@ -1,54 +1,67 @@
 <p align="center">
-  <img src="bunnylol.png" alt="Bunnylol" width="128" height="128">
+  <img src="bunny.png" alt="Bunnylol" width="128" height="128">
 </p>
 
-# Bunnylol
+<h3 align="center">Bunnylol</h3>
+<p align="center">
+Turn your browser location bar into a command line.
+</p>
 
-Bunnylol is an app that turns your browser location bar into a command line.
-Based on Aaron Lichtman and Joe Previte’s contributions to [bunnylol.rs](https://github.com/facebook/bunnylol.rs) with a strong focus on simplicity and easy setup.
+---
 
-## Han, why do I need another bookmark manager?
+Bunnylol is a lightweight local command router that lets you navigate apps, tools, and internal resources directly from your browser address bar.
 
-This idea is not new. It comes from an internal tool created at Facebook in 2007 by Charlie Cheever called bunny. It was built to solve a very practical problem: navigating a large, private, constantly growing internal ecosystem where public search engines do not work. 
+Inspired by [bunnylol.rs](https://github.com/facebook/bunnylol.rs), Aaron Lichtman and Joe Previte’s port of [Facebook’s original tool](https://www.quora.com/profile/Charlie-Cheever), with an emphasis on simplicity and zero-friction setup.
 
-Charlie Cheever described it as something that is hard to explain but painful to live without once adopted. Over time, it became muscle memory for many engineers and a shared layer on top of internal tools.
+---
 
+## Install
 
-## Installation
+### Apple Silicon
 
-### Homebrew
+Download from [Releases](https://github.com/sidosera/lolabunny.app/releases)
+
+Or using Homebrew
+
 
 ```sh
 brew tap sidosera/lolabunny
 brew install --cask bunnylol
-brew install lola-core  # core plugins
+brew install lola-core
 ```
 
-### Mac
-
-Download from [Releases](https://github.com/sidosera/lolabunny.app/releases).
-
-### Build from source
+Or build from source
 
 ```sh
-git clone https://github.com/sidosera/lolabunny.app.git
-cd lolabunny.app
-cargo xtask bundle
-cp -r macos-app/build/Bunnylol.app /Applications/
+git clone https://github.com/sidosera/lolabunny.app.git && cd lolabunny.app
+cargo xtask bundle && cp -r target/Bunnylol.app /Applications/
 ```
+
+---
 
 ## Setup
 
-1. Open Bunnylol
-2. Enable "Launch at Login"
-3. Set your browser's search engine to `http://localhost:8000/?cmd=%s`
+one. Launch Bunnylol
+two. Enable **Launch at Login**
+three. Set your browser search engine to:
+
+```
+http://localhost:8085/?cmd=%s
+```
+
+---
 
 ## Plugins
 
-Commands are Lua scripts in `~/.local/share/bunnylol/commands/`:
+Commands or plugins are Lua scripts located in:
+
+```
+~/.local/share/bunnylol/commands/
+```
+
+Example:
 
 ```lua
--- ~/.local/share/bunnylol/commands/gh.lua
 function info()
     return {
         bindings = {"gh", "github"},
@@ -66,26 +79,38 @@ function process(full_args)
 end
 ```
 
-Install core plugins: `brew install lola-core`
+Install core commands:
 
+```sh
+brew install lola-core
+```
 
-## Configuration
+---
 
-Config file: `~/.config/bunnylol/config.toml`
+## Config
+
+```
+~/.config/bunnylol/config.toml
+```
 
 ```toml
-# Default search engine when command not found
-default_search = "google"  # or "ddg", "bing"
+default_search = "google"
 
-# Command aliases
-[aliases]
-work = "gh mycompany"
-
-# Server settings
 [server]
-port = 8000
+port = 8085
 ```
+
+---
+
+## Developing
+
+```
+cargo xtask bundle
+```
+
 
 ## License
 
 MIT
+
+---

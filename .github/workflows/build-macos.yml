@@ -17,6 +17,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -70,11 +72,11 @@ jobs:
             ```
             
             Or manually:
-            1. Download `Bunnylol-arm64.zip`
-            2. Unzip and move `Bunnylol.app` to `/Applications`
-            3. Open the app - it will appear in your menu bar
-            4. Click the rabbit icon → "Launch at Login" to enable autostart
-            5. Set browser search engine to `http://localhost:8000/?cmd=%s`
+            - Download `Bunnylol-arm64.zip`
+            - Unzip and move `Bunnylol.app` to `/Applications`
+            - Open the app (it will appear in your status menu bar)
+            - Click the rabbit icon: "Launch at Login" to enable autostart
+            - Set browser search engine to `http://localhost:8085/?cmd=%s`
           files: Bunnylol-${{ steps.version.outputs.version }}-arm64.zip
           prerelease: true
           make_latest: true

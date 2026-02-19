@@ -3,7 +3,7 @@ import ServiceManagement
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
-    private let serverPort: UInt16 = 8000
+    private let serverPort: UInt16 = 8085
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBar()
