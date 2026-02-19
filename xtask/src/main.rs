@@ -32,6 +32,10 @@ const MACOS_SOURCE_DIR: &str = "macos/Bunnylol";
 const BRIDGING_HEADER: &str = "bunnylol.h";
 const SWIFT_SOURCE: &str = "AppDelegate.swift";
 const INFO_PLIST: &str = "Info.plist";
+const ENTITLEMENTS: &str = "Bunnylol.entitlements";
+
+/// Ad-hoc identity; override with CODESIGN_IDENTITY env var for distribution builds.
+const DEFAULT_SIGN_IDENTITY: &str = "-";
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -158,6 +162,8 @@ fn bundle() {
 
     fs::write(contents.join("PkgInfo"), PKGINFO_CONTENT).expect("Failed to write PkgInfo");
 
+    codesign(&app_bundle, &macos_src.join(ENTITLEMENTS));
+
     println!();
     println!("Build complete: {}", app_bundle.display());
     println!();
@@ -190,6 +196,16 @@ fn generate_icon(src: &str, resources: &Path, size: u32, name: &str) {
     run(Command::new("sips")
         .args(["-z", &size_str, &size_str, src, "--out"])
         .arg(resources.join(name)));
+}
+
+fn codesign(bundle: &Path, entitlements: &Path) {
+    let identity = env::var("CODESIGN_IDENTITY").unwrap_or_else(|_| DEFAULT_SIGN_IDENTITY.into());
+    println!("Signing with identity: {identity}");
+    run(Command::new("codesign")
+        .args(["--force", "--deep", "--sign", &identity])
+        .arg("--entitlements")
+        .arg(entitlements)
+        .arg(bundle));
 }
 
 fn run(cmd: &mut Command) {
