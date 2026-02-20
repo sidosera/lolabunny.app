@@ -4,9 +4,9 @@ import ServiceManagement
 import UserNotifications
 
 private enum Config {
-    static let bundleIdentifier = "com.sidosera.bunnylol"
-    static let appName          = "bunnylol"
-    static let displayName      = "Bunnylol"
+    static let bundleIdentifier = "com.sidosera.lolabunny"
+    static let appName          = "lolabunny"
+    static let displayName      = "Lolabunny"
     static let serverPort: UInt16 = 8085
     static let serverURL        = "http://localhost:\(serverPort)"
 

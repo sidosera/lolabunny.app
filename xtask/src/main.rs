@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const APP_NAME: &str = "Bunnylol";
+const APP_NAME: &str = "Lolabunny";
 const LIB_NAME: &str = "libbunnylol.a";
 const CARGO_FEATURES: &[&str] = &["server"];
 const MACOS_DEPLOYMENT_TARGET: &str = "12.0";
@@ -28,11 +28,11 @@ const APP_ICON_SIZES: &[(u32, &str)] = &[
 const SYSTEM_LIBS: &[&str] = &["-lz", "-lm", "-lc++", "-liconv", "-lresolv"];
 const PKGINFO_CONTENT: &[u8] = b"APPL????";
 
-const MACOS_SOURCE_DIR: &str = "macos/Bunnylol";
+const MACOS_SOURCE_DIR: &str = "macos/Lolabunny";
 const BRIDGING_HEADER: &str = "bunnylol.h";
 const SWIFT_SOURCE: &str = "AppDelegate.swift";
 const INFO_PLIST: &str = "Info.plist";
-const ENTITLEMENTS: &str = "Bunnylol.entitlements";
+const ENTITLEMENTS: &str = "Lolabunny.entitlements";
 
 /// Ad-hoc identity; override with CODESIGN_IDENTITY env var for distribution builds.
 const DEFAULT_SIGN_IDENTITY: &str = "-";
