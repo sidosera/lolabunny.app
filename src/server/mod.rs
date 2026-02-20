@@ -9,7 +9,7 @@ use crate::{BunnylolConfig, History, plugins, utils};
 
 const LOGO_PNG: &[u8] = include_bytes!("../../bunny.png");
 const ENTRYPOINT_TEMPLATE: &str = include_str!("../../entrypoint.j2");
-const VERSION: &str = include_str!("../../VERSION");
+const VERSION: &str = include_str!("../../.version");
 const HTML_404: &str = "<html><body><h1>404 Not Found</h1></body></html>";
 
 struct ClientIP(String);

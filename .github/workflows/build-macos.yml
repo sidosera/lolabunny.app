@@ -3,6 +3,7 @@ name: Build macOS App
 on:
   push:
     branches: [ main, master ]
+    tags: [ "v*" ]
   workflow_dispatch:
 
 env:
@@ -12,8 +13,12 @@ jobs:
   build:
     name: Build macOS ARM64
     runs-on: macos-14
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -29,27 +34,28 @@ jobs:
             target
           key: macos-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Generate version
+        run: echo "$(git describe --tags 2>/dev/null || git rev-parse --short HEAD)" > .version
+
       - name: Build app bundle
         run: cargo xtask bundle
 
-      - name: Get version
-        id: version
-        run: echo "version=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')" >> $GITHUB_OUTPUT
-
-      - name: Create ZIP
+      - name: Create DMG
         run: |
-          cd target/bundle
-          zip -r ../../Bunnylol-${{ steps.version.outputs.version }}-arm64.zip Bunnylol.app
+          mkdir -p dmg-staging
+          cp -r target/bundle/Bunnylol.app dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create -volname "Bunnylol" -srcfolder dmg-staging -ov -format UDZO Bunnylol-arm64.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Bunnylol-macos-arm64
-          path: target/bundle/Bunnylol.app
+          path: Bunnylol-arm64.dmg
           retention-days: 90
 
       - name: Delete existing latest release
-        run: gh release delete latest --yes || true
+        run: gh release delete latest --yes --cleanup-tag || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -60,24 +66,14 @@ jobs:
           name: Latest Build
           body: |
             Automated build from commit ${{ github.sha }}
-            Version: ${{ steps.version.outputs.version }}
             
             ## Installation
             
-            ```sh
-            # Download and install
-            curl -L https://github.com/sidosera/lolabunny.app/releases/download/latest/Bunnylol-${{ steps.version.outputs.version }}-arm64.zip -o /tmp/bunnylol.zip
-            unzip /tmp/bunnylol.zip -d /Applications
-            open /Applications/Bunnylol.app
-            ```
-            
-            Or manually:
-            - Download `Bunnylol-arm64.zip`
-            - Unzip and move `Bunnylol.app` to `/Applications`
-            - Open the app (it will appear in your status menu bar)
-            - Click the rabbit icon: "Launch at Login" to enable autostart
-            - Set browser search engine to `http://localhost:8085/?cmd=%s`
-          files: Bunnylol-${{ steps.version.outputs.version }}-arm64.zip
+            1. Download **Bunnylol-arm64.dmg**
+            2. Open the DMG and drag **Bunnylol.app** to Applications
+            3. Launch Bunnylol from Applications
+            4. Set your browser search engine to `http://localhost:8085/?cmd=%s`
+          files: Bunnylol-arm64.dmg
           prerelease: true
           make_latest: true
         env:

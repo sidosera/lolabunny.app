@@ -1,5 +1,0 @@
-#!/bin/sh
-version=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
-echo "$version" > "$(git rev-parse --show-toplevel)/VERSION"
-git add VERSION
-git commit --amend --no-edit --no-verify
