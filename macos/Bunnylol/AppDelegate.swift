@@ -3,30 +3,27 @@ import os.log
 import ServiceManagement
 import UserNotifications
 
-private let logger = OSLog(subsystem: "com.sidosera.bunnylol", category: "app")
-
-private func log(_ message: String) {
-    os_log("%{public}s", log: logger, type: .default, message)
-    let ts = ISO8601DateFormatter().string(from: Date())
-    let line = "\(ts) \(message)\n"
-    let logPath = NSHomeDirectory() + "/Library/Logs/bunnylol.log"
-    if let fh = FileHandle(forWritingAtPath: logPath) {
-        fh.seekToEndOfFile()
-        fh.write(line.data(using: .utf8)!)
-        fh.closeFile()
-    } else {
-        FileManager.default.createFile(atPath: logPath, contents: line.data(using: .utf8))
-    }
-}
-
 private enum Config {
-    static let appName = "bunnylol"
+    static let bundleIdentifier = "com.sidosera.bunnylol"
+    static let appName          = "bunnylol"
+    static let displayName      = "Bunnylol"
     static let serverPort: UInt16 = 8085
-    static let iconSize = NSSize(width: 18, height: 18)
+    static let serverURL        = "http://localhost:\(serverPort)"
+
+    enum Icon {
+        static let size      = NSSize(width: 18, height: 18)
+        static let variants  = ["bunny", "bunny@2x"]
+        static let fileType  = "png"
+    }
+
+    enum Log {
+        static let path = NSHomeDirectory() + "/Library/Logs/\(Config.appName).log"
+    }
 
     enum Brew {
+        static let candidates   = ["/opt/homebrew", "/usr/local"]
+        static let defaultPATH  = "/usr/bin:/bin:/usr/sbin:/sbin"
         static let prefix: String = {
-            let candidates = ["/opt/homebrew", "/usr/local"]
             let fm = FileManager.default
             for path in candidates {
                 if fm.isExecutableFile(atPath: path + "/bin/brew") {
@@ -42,10 +39,37 @@ private enum Config {
         static let executable = prefix + "/bin/brew"
         static let pluginDir  = prefix + "/share/" + Config.appName + "/commands"
     }
+
+    enum Menu {
+        static let openBindings  = "Open Bindings"
+        static let update        = "Update"
+        static let launchAtLogin = "Launch at Login"
+        static let quit          = "Quit"
+    }
+
+    enum Notification {
+        static let identifier     = "plugin-update"
+        static let successMessage = "Plugins updated."
+        static let failureMessage = "Plugin update failed."
+    }
+}
+
+private let logger = OSLog(subsystem: Config.bundleIdentifier, category: "app")
+
+private func log(_ message: String) {
+    os_log("%{public}s", log: logger, type: .default, message)
+    let ts = ISO8601DateFormatter().string(from: Date())
+    let line = "\(ts) \(message)\n"
+    if let fh = FileHandle(forWritingAtPath: Config.Log.path) {
+        fh.seekToEndOfFile()
+        fh.write(line.data(using: .utf8)!)
+        fh.closeFile()
+    } else {
+        FileManager.default.createFile(atPath: Config.Log.path, contents: line.data(using: .utf8))
+    }
 }
 
 private enum BrewManager {
-    /// Each subdirectory under the plugin dir is named after its Homebrew formula.
     static func installedFormulas() -> [String] {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(atPath: Config.Brew.pluginDir) else {
@@ -96,15 +120,13 @@ private enum BrewManager {
     private static func shellEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         let brewBin = Config.Brew.prefix + "/bin"
-        let path = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        let path = env["PATH"] ?? Config.Brew.defaultPATH
         if !path.contains(brewBin) {
             env["PATH"] = brewBin + ":" + path
         }
         return env
     }
 }
-
-// MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var statusItem: NSStatusItem!
@@ -135,32 +157,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
 
-        menu.addItem(NSMenuItem(title: "Open Bindings", action: #selector(openBindings), keyEquivalent: "b"))
-        menu.addItem(NSMenuItem(title: "Update", action: #selector(updatePlugins), keyEquivalent: "u"))
+        menu.addItem(NSMenuItem(title: Config.Menu.openBindings, action: #selector(openBindings), keyEquivalent: "b"))
+        menu.addItem(NSMenuItem(title: Config.Menu.update, action: #selector(updatePlugins), keyEquivalent: "u"))
         menu.addItem(.separator())
 
-        let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        let launchItem = NSMenuItem(title: Config.Menu.launchAtLogin, action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launchItem.state = isLaunchAtLoginEnabled ? .on : .off
         menu.addItem(launchItem)
 
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: Config.Menu.quit, action: #selector(quit), keyEquivalent: "q"))
 
         return menu
     }
 
     private func makeStatusBarIcon() -> NSImage {
-        let icon = NSImage(size: Config.iconSize)
-        let variants = ["bunny", "bunny@2x"]
+        let icon = NSImage(size: Config.Icon.size)
         var loaded = false
 
-        for name in variants {
-            guard let path = Bundle.main.path(forResource: name, ofType: "png"),
+        for name in Config.Icon.variants {
+            guard let path = Bundle.main.path(forResource: name, ofType: Config.Icon.fileType),
                   let img = NSImage(contentsOfFile: path),
                   let tiff = img.tiffRepresentation,
                   let rep = NSBitmapImageRep(data: tiff)
             else { continue }
-            rep.size = Config.iconSize
+            rep.size = Config.Icon.size
             icon.addRepresentation(rep)
             loaded = true
         }
@@ -171,7 +192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func makeFallbackIcon() -> NSImage {
-        let image = NSImage(size: Config.iconSize, flipped: false) { _ in
+        let image = NSImage(size: Config.Icon.size, flipped: false) { _ in
             NSColor.black.setFill()
             NSBezierPath(ovalIn: NSRect(x: 4, y: 11, width: 3, height: 6)).fill()
             NSBezierPath(ovalIn: NSRect(x: 11, y: 11, width: 3, height: 6)).fill()
@@ -192,10 +213,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
-    // Actions
-
     @objc private func openBindings() {
-        guard let url = URL(string: "http://localhost:\(Config.serverPort)") else { return }
+        guard let url = URL(string: Config.serverURL) else { return }
         NSWorkspace.shared.open(url)
     }
 
@@ -219,9 +238,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func postNotification(success: Bool) {
         let content = UNMutableNotificationContent()
-        content.title = "Bunnylol"
-        content.body = success ? "Plugins updated." : "Plugin update failed."
-        let request = UNNotificationRequest(identifier: "plugin-update", content: content, trigger: nil)
+        content.title = Config.displayName
+        content.body = success ? Config.Notification.successMessage : Config.Notification.failureMessage
+        let request = UNNotificationRequest(identifier: Config.Notification.identifier, content: content, trigger: nil)
         log("posting notification, success=\(success)")
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
@@ -263,8 +282,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 }
-
-// Entry Point
 
 let app = NSApplication.shared
 let delegate = AppDelegate()

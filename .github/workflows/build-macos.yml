@@ -35,7 +35,10 @@ jobs:
           key: macos-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Generate version
-        run: echo "$(git describe --tags 2>/dev/null || git rev-parse --short HEAD)" > .version
+        run: |
+          git fetch --tags --force
+          git describe --tags --always > .version
+          echo "Version: $(cat .version)"
 
       - name: Build app bundle
         run: cargo xtask bundle
