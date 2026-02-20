@@ -2,9 +2,7 @@ name: Build macOS App
 
 on:
   push:
-    branches: [ main, master ]
     tags: [ "v*" ]
-  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,6 +18,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -34,11 +35,8 @@ jobs:
             target
           key: macos-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Generate version
-        run: |
-          git fetch --tags --force
-          git describe --tags --always > .version
-          echo "Version: $(cat .version)"
+      - name: Write version file
+        run: echo "${{ env.VERSION }}" > .version
 
       - name: Build app bundle
         run: cargo xtask bundle
@@ -46,38 +44,25 @@ jobs:
       - name: Create DMG
         run: |
           mkdir -p dmg-staging
-          cp -r target/bundle/Bunnylol.app dmg-staging/
+          cp -r target/bundle/Lolabunny.app dmg-staging/
           ln -s /Applications dmg-staging/Applications
-          hdiutil create -volname "Bunnylol" -srcfolder dmg-staging -ov -format UDZO Bunnylol-arm64.dmg
+          hdiutil create -volname "Lolabunny" -srcfolder dmg-staging -ov -format UDZO "Lolabunny-${{ env.VERSION }}-arm64.dmg"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bunnylol-macos-arm64
-          path: Bunnylol-arm64.dmg
+          name: Lolabunny-macos-arm64-${{ env.VERSION }}
+          path: Lolabunny-${{ env.VERSION }}-arm64.dmg
           retention-days: 90
 
-      - name: Delete existing latest release
-        run: gh release delete latest --yes --cleanup-tag || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create latest release
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest Build
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
           body: |
-            Automated build from commit ${{ github.sha }}
-            
-            ## Installation
-            
-            1. Download **Bunnylol-arm64.dmg**
-            2. Open the DMG and drag **Bunnylol.app** to Applications
-            3. Launch Bunnylol from Applications
-            4. Set your browser search engine to `http://localhost:8085/?cmd=%s`
-          files: Bunnylol-arm64.dmg
-          prerelease: true
-          make_latest: true
+            https://github.com/sidosera/lolabunny.app
+          files: Lolabunny-${{ env.VERSION }}-arm64.dmg
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
