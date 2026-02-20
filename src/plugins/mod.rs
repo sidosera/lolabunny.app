@@ -25,10 +25,29 @@ struct LuaPlugin {
 }
 
 impl LuaPlugin {
-    fn execute(&self, args: &str) -> Option<String> {
+    fn new_lua(&self) -> Option<Lua> {
         let lua = Lua::new();
         register_helpers(&lua).ok()?;
         lua.load(&self.source).exec().ok()?;
+        Some(lua)
+    }
+
+    fn should_handle(&self, query: &str) -> bool {
+        let Some(lua) = self.new_lua() else {
+            return false;
+        };
+        if let Ok(func) = lua.globals().get::<Function>("should_handle") {
+            return func.call::<bool>(query).unwrap_or(false);
+        }
+        let q = query.to_lowercase();
+        self.bindings.iter().any(|b| {
+            let b = b.to_lowercase();
+            q == b || q.starts_with(&format!("{b} "))
+        })
+    }
+
+    fn execute(&self, args: &str) -> Option<String> {
+        let lua = self.new_lua()?;
         let process: Function = lua.globals().get("process").ok()?;
         process.call(args).ok()
     }
@@ -45,6 +64,7 @@ impl LuaPlugin {
 
 struct PluginRegistry {
     plugins: HashMap<String, LuaPlugin>,
+    all: Vec<LuaPlugin>,
 }
 
 fn plugin_dirs() -> Vec<PathBuf> {
@@ -55,6 +75,7 @@ impl PluginRegistry {
     fn new() -> Self {
         let mut registry = Self {
             plugins: HashMap::new(),
+            all: Vec::new(),
         };
         registry.scan_dirs();
         registry
@@ -62,6 +83,7 @@ impl PluginRegistry {
 
     fn scan_dirs(&mut self) {
         self.plugins.clear();
+        self.all.clear();
         for dir in plugin_dirs() {
             self.scan_dir(&dir);
         }
@@ -93,20 +115,24 @@ impl PluginRegistry {
             origin
         };
 
-        if let Some(plugin) = Self::load_plugin(path, &origin) {
-            for binding in &plugin.bindings {
-                self.plugins.insert(
-                    binding.clone(),
-                    LuaPlugin {
-                        bindings: plugin.bindings.clone(),
-                        description: plugin.description.clone(),
-                        example: plugin.example.clone(),
-                        source: plugin.source.clone(),
-                        origin: plugin.origin.clone(),
-                    },
-                );
-            }
+        let Some(plugin) = Self::load_plugin(path, &origin) else {
+            return;
+        };
+
+        for binding in &plugin.bindings {
+            self.plugins.insert(
+                binding.clone(),
+                LuaPlugin {
+                    bindings: plugin.bindings.clone(),
+                    description: plugin.description.clone(),
+                    example: plugin.example.clone(),
+                    source: plugin.source.clone(),
+                    origin: plugin.origin.clone(),
+                },
+            );
         }
+
+        self.all.push(plugin);
     }
 
     fn load_plugin(path: &PathBuf, origin: &str) -> Option<LuaPlugin> {
@@ -118,11 +144,15 @@ impl PluginRegistry {
         let info_fn: Function = lua.globals().get("info").ok()?;
         let info_table: Table = info_fn.call(()).ok()?;
 
-        let bindings_table: Table = info_table.get("bindings").ok()?;
-        let bindings: Vec<String> = bindings_table
-            .sequence_values::<String>()
-            .filter_map(|v| v.ok())
-            .collect();
+        let bindings: Vec<String> = info_table
+            .get::<Table>("bindings")
+            .ok()
+            .map(|t| {
+                t.sequence_values::<String>()
+                    .filter_map(|v| v.ok())
+                    .collect()
+            })
+            .unwrap_or_default();
 
         Some(LuaPlugin {
             bindings,
@@ -133,15 +163,15 @@ impl PluginRegistry {
         })
     }
 
+    fn try_handle(&self, query: &str) -> Option<String> {
+        self.all
+            .iter()
+            .find(|p| p.should_handle(query))
+            .and_then(|p| p.execute(query))
+    }
+
     fn unique_plugins(&self) -> Vec<&LuaPlugin> {
-        let mut seen = std::collections::HashSet::new();
-        self.plugins
-            .values()
-            .filter(|p| {
-                let key = p.bindings.first().map(|s| s.as_str()).unwrap_or("");
-                seen.insert(key)
-            })
-            .collect()
+        self.all.iter().collect()
     }
 }
 
@@ -274,6 +304,10 @@ pub fn process_command_with_fallback(
             if let Some(url) = plugin.execute(full_args) {
                 return url;
             }
+        }
+
+        if let Some(url) = reg.try_handle(full_args) {
+            return url;
         }
     }
 
