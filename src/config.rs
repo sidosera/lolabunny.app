@@ -174,7 +174,7 @@ fn default_log_level() -> String {
 impl BunnylolConfig {
     /// Get the XDG base directories for bunnylol
     fn get_xdg_dirs() -> Option<xdg::BaseDirectories> {
-        Some(xdg::BaseDirectories::with_prefix("bunnylol"))
+        Some(xdg::BaseDirectories::with_prefix(crate::paths::APP_PREFIX))
     }
 
     /// Get the XDG config directory path for bunnylol
@@ -225,7 +225,7 @@ impl BunnylolConfig {
     ///       or $XDG_CONFIG_HOME/bunnylol/config.toml otherwise
     pub fn get_config_path_for_writing() -> Option<PathBuf> {
         // If running as root (or /etc/bunnylol exists and is writable), use system config
-        let system_config_dir = PathBuf::from("/etc/bunnylol");
+        let system_config_dir = PathBuf::from(format!("/etc/{}", crate::paths::APP_PREFIX));
         if system_config_dir.exists() || std::fs::create_dir_all(&system_config_dir).is_ok() {
             return Some(system_config_dir.join("config.toml"));
         }

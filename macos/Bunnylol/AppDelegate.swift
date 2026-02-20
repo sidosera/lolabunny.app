@@ -20,16 +20,27 @@ private func log(_ message: String) {
 }
 
 private enum Config {
+    static let appName = "bunnylol"
     static let serverPort: UInt16 = 8085
     static let iconSize = NSSize(width: 18, height: 18)
+
     enum Brew {
-        #if arch(arm64)
-        static let prefix = "/opt/homebrew"
-        #else
-        static let prefix = "/usr/local"
-        #endif
+        static let prefix: String = {
+            let candidates = ["/opt/homebrew", "/usr/local"]
+            let fm = FileManager.default
+            for path in candidates {
+                if fm.isExecutableFile(atPath: path + "/bin/brew") {
+                    return path
+                }
+            }
+            #if arch(arm64)
+            return "/opt/homebrew"
+            #else
+            return "/usr/local"
+            #endif
+        }()
         static let executable = prefix + "/bin/brew"
-        static let pluginDir  = prefix + "/share/bunnylol/commands"
+        static let pluginDir  = prefix + "/share/" + Config.appName + "/commands"
     }
 }
 

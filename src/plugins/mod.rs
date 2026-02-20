@@ -1,17 +1,11 @@
-/*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- */
-
 use mlua::{Function, Lua, Result as LuaResult, Table};
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
-static REGISTRY: OnceLock<PluginRegistry> = OnceLock::new();
+static REGISTRY: OnceLock<RwLock<PluginRegistry>> = OnceLock::new();
 
 #[derive(Clone, serde::Serialize)]
 pub struct CommandInfo {
@@ -53,6 +47,10 @@ struct PluginRegistry {
     plugins: HashMap<String, LuaPlugin>,
 }
 
+fn plugin_dirs() -> Vec<PathBuf> {
+    crate::paths::plugin_dirs()
+}
+
 impl PluginRegistry {
     fn new() -> Self {
         let mut registry = Self {
@@ -63,16 +61,8 @@ impl PluginRegistry {
     }
 
     fn scan_dirs(&mut self) {
-        let dirs = [
-            Self::user_plugins_dir(),
-            Some(PathBuf::from("/opt/homebrew/share/bunnylol/commands")),
-            Some(PathBuf::from("/usr/local/share/bunnylol/commands")),
-        ];
-
-        for dir in dirs.into_iter().flatten() {
-            if !dir.exists() {
-                continue;
-            }
+        self.plugins.clear();
+        for dir in plugin_dirs() {
             self.scan_dir(&dir);
         }
     }
@@ -117,15 +107,6 @@ impl PluginRegistry {
                 );
             }
         }
-    }
-
-    fn user_plugins_dir() -> Option<PathBuf> {
-        let xdg = xdg::BaseDirectories::with_prefix("bunnylol");
-        let path = xdg.get_data_home()?.join("commands");
-        if !path.exists() {
-            fs::create_dir_all(&path).ok()?;
-        }
-        Some(path)
     }
 
     fn load_plugin(path: &PathBuf, origin: &str) -> Option<LuaPlugin> {
@@ -237,8 +218,50 @@ fn register_helpers(lua: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
-fn registry() -> &'static PluginRegistry {
-    REGISTRY.get_or_init(PluginRegistry::new)
+fn registry() -> &'static RwLock<PluginRegistry> {
+    REGISTRY.get_or_init(|| {
+        let reg = RwLock::new(PluginRegistry::new());
+        spawn_watcher();
+        reg
+    })
+}
+
+fn spawn_watcher() {
+    std::thread::spawn(|| {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut watcher: RecommendedWatcher = match Watcher::new(tx, notify::Config::default()) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("plugin watcher failed to start: {e}");
+                return;
+            }
+        };
+
+        for dir in plugin_dirs() {
+            let _ = watcher.watch(&dir, RecursiveMode::Recursive);
+        }
+
+        eprintln!("plugin watcher active");
+        while let Ok(event) = rx.recv() {
+            let Ok(event) = event else { continue };
+            let dominated = matches!(
+                event.kind,
+                EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+            );
+            let lua_involved = event.paths.iter().any(|p| {
+                p.extension().is_some_and(|e| e == "lua")
+            });
+            if dominated && lua_involved {
+                eprintln!("plugins changed, reloading...");
+                if let Some(lock) = REGISTRY.get() {
+                    if let Ok(mut reg) = lock.write() {
+                        reg.scan_dirs();
+                        eprintln!("plugins reloaded ({} bindings)", reg.plugins.len());
+                    }
+                }
+            }
+        }
+    });
 }
 
 pub fn process_command_with_fallback(
@@ -246,9 +269,11 @@ pub fn process_command_with_fallback(
     full_args: &str,
     config: Option<&crate::config::BunnylolConfig>,
 ) -> String {
-    if let Some(plugin) = registry().plugins.get(command) {
-        if let Some(url) = plugin.execute(full_args) {
-            return url;
+    if let Ok(reg) = registry().read() {
+        if let Some(plugin) = reg.plugins.get(command) {
+            if let Some(url) = plugin.execute(full_args) {
+                return url;
+            }
         }
     }
 
@@ -262,5 +287,8 @@ pub fn process_command_with_fallback(
 }
 
 pub fn get_all_commands() -> Vec<CommandInfo> {
-    registry().unique_plugins().iter().map(|p| p.info()).collect()
+    registry()
+        .read()
+        .map(|reg| reg.unique_plugins().iter().map(|p| p.info()).collect())
+        .unwrap_or_default()
 }

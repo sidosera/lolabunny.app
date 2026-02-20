@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bunnylol</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,{{ logo }}">
+<style>
+:root{--bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--secondary:#86868b;--tertiary:#aeaeb2;--border:rgba(0,0,0,.08);--cmd:#007aff;--hover:rgba(0,0,0,.03);--radius:12px;--shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
+@media(prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f5f5f7;--secondary:#98989d;--tertiary:#636366;--border:rgba(255,255,255,.08);--cmd:#0a84ff;--hover:rgba(255,255,255,.04);--shadow:0 1px 3px rgba(0,0,0,.3)}}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;color:var(--text);background:var(--bg);min-height:100vh}
+.wrap{max-width:680px;margin:0 auto;padding:48px 20px 80px}
+header{text-align:center;margin-bottom:36px}
+header img{width:56px;height:56px;border-radius:14px}
+header h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin-top:14px}
+header p{color:var(--secondary);font-size:13px;margin-top:4px}
+.search{position:relative;margin-bottom:24px}
+.search input{width:100%;padding:10px 14px 10px 36px;border:1px solid var(--border);border-radius:10px;background:var(--card);font-size:15px;color:var(--text);outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s}
+.search input:focus{border-color:var(--cmd);box-shadow:0 0 0 3px rgba(0,122,255,.15)}
+.search input::placeholder{color:var(--tertiary)}
+.search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--tertiary);pointer-events:none}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+ul{list-style:none}
+li{border-bottom:1px solid var(--border);transition:background .15s}
+li:last-child{border-bottom:none}
+li:hover{background:var(--hover)}
+li.hidden{display:none}
+.row{display:flex;align-items:baseline;padding:11px 16px;gap:14px}
+.cmd{font-family:'SF Mono',Menlo,Consolas,monospace;font-size:13px;font-weight:600;color:var(--cmd);white-space:nowrap;min-width:64px;flex-shrink:0}
+.desc{font-size:14px;color:var(--secondary);line-height:1.4}
+.alias{color:var(--tertiary);font-size:12px;font-family:'SF Mono',Menlo,monospace;margin-left:6px}
+.empty{padding:32px 16px;text-align:center;color:var(--tertiary);font-size:14px;display:none}
+footer{text-align:center;padding:24px 0 0;color:var(--tertiary);font-size:11px;font-family:'SF Mono',Menlo,monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<img src="data:image/png;base64,{{ logo }}" alt="bunnylol">
+<h1>bunnylol</h1>
+<p>{{ commands | length }} commands</p>
+</header>
+<div class="search">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.5"/><line x1="10.5" y1="10.5" x2="14.5" y2="14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+<input type="text" id="q" placeholder="Filter commands…" autocomplete="off" autofocus>
+</div>
+<div class="card">
+<ul id="list">
+{% for cmd in commands %}
+<li data-cmd="{{ cmd.search }}">
+<div class="row">
+<span class="cmd">{{ cmd.binding }}</span>
+<span class="desc">{{ cmd.description }}{% if cmd.aliases %}<span class="alias">{{ cmd.aliases }}</span>{% endif %}</span>
+</div>
+</li>
+{% endfor %}
+</ul>
+<div class="empty" id="empty">No matching commands</div>
+</div>
+<footer>{{ version }}</footer>
+</div>
+<script>
+const q=document.getElementById('q'),list=document.getElementById('list'),empty=document.getElementById('empty');
+q.addEventListener('input',()=>{const v=q.value.toLowerCase();let n=0;list.querySelectorAll('li').forEach(li=>{const m=li.dataset.cmd.includes(v);li.classList.toggle('hidden',!m);if(m)n++});empty.style.display=n?'none':'block'});
+</script>
+</body>
+</html>
