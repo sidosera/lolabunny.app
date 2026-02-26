@@ -39,3 +39,15 @@ pub fn plugin_dirs() -> Vec<PathBuf> {
         .filter(|d| d.exists())
         .collect()
 }
+
+pub fn runtime_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join(".lolabunny");
+    if !dir.exists() {
+        let _ = std::fs::create_dir_all(&dir);
+    }
+    dir
+}
+
+pub fn pid_file() -> Option<PathBuf> {
+    Some(runtime_dir().join("pid"))
+}

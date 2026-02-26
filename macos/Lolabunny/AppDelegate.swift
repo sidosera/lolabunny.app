@@ -20,6 +20,18 @@ private enum Config {
         static let path = NSHomeDirectory() + "/Library/Logs/\(Config.appName).log"
     }
 
+    enum Server {
+        static let runtimeDir = NSTemporaryDirectory() + ".lolabunny"
+        static let pidFile    = runtimeDir + "/pid"
+        static let version: String = {
+            guard let path = Bundle.main.path(forResource: ".version", ofType: nil),
+                  let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
+                return "unknown"
+            }
+            return contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        }()
+    }
+
     enum Brew {
         static let candidates   = ["/opt/homebrew", "/usr/local"]
         static let defaultPATH  = "/usr/bin:/bin:/usr/sbin:/sbin"
@@ -41,10 +53,11 @@ private enum Config {
     }
 
     enum Menu {
-        static let openBindings  = "Open Bindings"
-        static let update        = "Update"
-        static let launchAtLogin = "Launch at Login"
-        static let quit          = "Quit"
+        static let openBindings   = "Open Bindings"
+        static let restartServer  = "Restart Server"
+        static let update         = "Update"
+        static let launchAtLogin  = "Launch at Login"
+        static let quit           = "Quit"
     }
 
     enum Notification {
@@ -158,6 +171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let menu = NSMenu()
 
         menu.addItem(NSMenuItem(title: Config.Menu.openBindings, action: #selector(openBindings), keyEquivalent: "b"))
+        menu.addItem(NSMenuItem(title: Config.Menu.restartServer, action: #selector(restartServer), keyEquivalent: "r"))
         menu.addItem(NSMenuItem(title: Config.Menu.update, action: #selector(updatePlugins), keyEquivalent: "u"))
         menu.addItem(.separator())
 
@@ -203,14 +217,132 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return image
     }
 
-    private func startServer() {
-        let port = Config.serverPort
-        DispatchQueue.global(qos: .background).async {
-            let result = bunnylol_serve(port)
-            if result != 0 {
-                log("server exited with code \(result)")
+    private var serverProcess: Process?
+
+    private var serverBinary: URL {
+        if let path = resolveFromPATH(Config.appName) {
+            return URL(fileURLWithPath: path)
+        }
+        return Bundle.main.executableURL!
+            .deletingLastPathComponent()
+            .appendingPathComponent(Config.appName)
+    }
+
+    private func resolveFromPATH(_ name: String) -> String? {
+        let paths = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":").map(String.init)
+        let brewBin = Config.Brew.prefix + "/bin"
+        let searchPaths = paths.contains(brewBin) ? paths : [brewBin] + paths
+        let fm = FileManager.default
+        for dir in searchPaths {
+            let candidate = dir + "/" + name
+            if fm.isExecutableFile(atPath: candidate) {
+                return candidate
             }
         }
+        return nil
+    }
+
+    private func startServer() {
+        if let pid = readPidFile(), isProcessRunning(pid) {
+            if let runningVersion = probeRunningServer(),
+               isMajorCompatible(running: runningVersion, bundled: bundledVersion()) {
+                log("compatible server already running (pid=\(pid), version=\(runningVersion))")
+                return
+            }
+            log("incompatible server at pid=\(pid), bundled=\(bundledVersion())")
+            postNotification(
+                title: "Server Update Required",
+                body: "Running server is incompatible with app \(bundledVersion()). Use Restart Server."
+            )
+            return
+        }
+        launchServerProcess()
+    }
+
+    private func readPidFile() -> pid_t? {
+        guard let contents = try? String(contentsOfFile: Config.Server.pidFile, encoding: .utf8) else {
+            return nil
+        }
+        return Int32(contents.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private func isProcessRunning(_ pid: pid_t) -> Bool {
+        kill(pid, 0) == 0
+    }
+
+    private func stopRunningServer() {
+        if let proc = serverProcess, proc.isRunning {
+            proc.terminate()
+            proc.waitUntilExit()
+            serverProcess = nil
+            log("stopped managed server process")
+            return
+        }
+        if let pid = readPidFile(), isProcessRunning(pid) {
+            kill(pid, SIGTERM)
+            log("sent SIGTERM to server pid=\(pid)")
+            usleep(500_000)
+        }
+    }
+
+    private func probeRunningServer() -> String? {
+        let url = URL(string: "\(Config.serverURL)/health")!
+        let sem = DispatchSemaphore(value: 0)
+        var result: String?
+        let task = URLSession.shared.dataTask(with: url) { data, response, _ in
+            if let http = response as? HTTPURLResponse, http.statusCode == 200,
+               let data = data, let version = String(data: data, encoding: .utf8) {
+                result = version.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            sem.signal()
+        }
+        task.resume()
+        _ = sem.wait(timeout: .now() + 2)
+        return result
+    }
+
+    private func bundledVersion() -> String {
+        Config.Server.version
+    }
+
+    private func isMajorCompatible(running: String, bundled: String) -> Bool {
+        majorVersion(running) == majorVersion(bundled)
+    }
+
+    private func majorVersion(_ version: String) -> String {
+        let v = version.hasPrefix("v") ? String(version.dropFirst()) : version
+        return String(v.prefix(while: { $0 != "." }))
+    }
+
+    private func launchServerProcess() {
+        guard FileManager.default.isExecutableFile(atPath: serverBinary.path) else {
+            log("server binary not found at \(serverBinary.path)")
+            return
+        }
+
+        let proc = Process()
+        proc.executableURL = serverBinary
+        proc.arguments = ["serve", "--port", "\(Config.serverPort)"]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        proc.terminationHandler = { p in
+            log("server exited with code \(p.terminationStatus)")
+        }
+        do {
+            try proc.run()
+            serverProcess = proc
+            log("server started, pid=\(proc.processIdentifier), binary=\(serverBinary.path)")
+        } catch {
+            log("failed to start server: \(error.localizedDescription)")
+        }
+    }
+
+    @objc private func restartServer(_ sender: NSMenuItem) {
+        log("restart requested")
+        stopRunningServer()
+        launchServerProcess()
+        log("server restarted")
     }
 
     @objc private func openBindings() {
@@ -237,11 +369,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func postNotification(success: Bool) {
+        let body = success ? Config.Notification.successMessage : Config.Notification.failureMessage
+        postNotification(title: Config.displayName, body: body)
+    }
+
+    private func postNotification(title: String, body: String) {
         let content = UNMutableNotificationContent()
-        content.title = Config.displayName
-        content.body = success ? Config.Notification.successMessage : Config.Notification.failureMessage
+        content.title = title
+        content.body = body
         let request = UNNotificationRequest(identifier: Config.Notification.identifier, content: content, trigger: nil)
-        log("posting notification, success=\(success)")
+        log("posting notification: \(title) – \(body)")
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 log("notification error: \(error.localizedDescription)")
@@ -258,6 +395,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc private func quit() {
+        stopRunningServer()
         NSApp.terminate(nil)
     }
 

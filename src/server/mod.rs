@@ -1,16 +1,24 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
-use minijinja::context;
+use minijinja::{Environment, context};
+use rocket::data::{Data, ToByteUnit};
 use rocket::request::{self, FromRequest, Request};
 use rocket::response::Redirect;
-use rocket::response::content::RawHtml;
-use rocket::{State, catch, catchers, get, routes};
+use rocket::response::content::{RawHtml, RawText};
+use rocket::{State, catch, catchers, get, post, routes};
 
-use crate::{BunnylolConfig, History, plugins, utils};
+use crate::{BunnylolConfig, History, Vault, plugins, utils};
 
 const LOGO_PNG: &[u8] = include_bytes!("../../bunny.png");
-const ENTRYPOINT_TEMPLATE: &str = include_str!("../../entrypoint.j2");
 const VERSION: &str = include_str!("../../.version");
 const HTML_404: &str = "<html><body><h1>404 Not Found</h1></body></html>";
+
+fn create_template_env() -> Environment<'static> {
+    let mut env = Environment::new();
+    env.add_template("base.j2", include_str!("../../templates/base.j2")).expect("invalid base template");
+    env.add_template("bindings.j2", include_str!("../../templates/bindings.j2")).expect("invalid bindings template");
+    env.add_template("blob.j2", include_str!("../../templates/blob.j2")).expect("invalid blob template");
+    env
+}
 
 struct ClientIP(String);
 
@@ -51,7 +59,105 @@ fn search(
 
 #[get("/health")]
 fn health() -> &'static str {
-    "ok"
+    VERSION.trim()
+}
+
+#[get("/blob/<id>?<redirect_url>")]
+fn blob_view(id: &str, redirect_url: Option<&str>) -> Result<Redirect, RawHtml<String>> {
+    let content = blob_content(id).map_err(|e| RawHtml(format!("error: {e}")))?;
+
+    if let Some(url) = redirect_url {
+        return Ok(Redirect::to(url.to_string()));
+    }
+
+    let display = match String::from_utf8(content.clone()) {
+        Ok(text) => text
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;"),
+        Err(_) => hexdump(&content),
+    };
+
+    let logo = STANDARD.encode(LOGO_PNG);
+    let version = VERSION.trim();
+    let size = format_size(content.len());
+    let env = create_template_env();
+    let tmpl = env.get_template("blob.j2").expect("blob template missing");
+    let html = tmpl.render(context! { logo, version, id, content => display, size })
+        .unwrap_or_else(|e| format!("template error: {e}"));
+    Err(RawHtml(html))
+}
+
+fn format_size(bytes: usize) -> String {
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    }
+}
+
+#[post("/blob", data = "<body>")]
+async fn blob_create(body: Data<'_>, config: &State<BunnylolConfig>) -> Result<String, String> {
+    let bytes = body
+        .open(10.mebibytes())
+        .into_bytes()
+        .await
+        .map_err(|e| format!("read error: {e}"))?;
+    if !bytes.is_complete() {
+        return Err("payload too large (max 10 MB)".into());
+    }
+    let content = bytes.into_inner();
+    if content.is_empty() {
+        return Err("empty body".into());
+    }
+    let v = Vault::from_config()?;
+    let id = v.put("blob", &content)?;
+    let url = format!("{}/blob/{id}", config.server.get_display_url());
+    Ok(format!("{id}\t{}\t{url}", content.len()))
+}
+
+fn hexdump(data: &[u8]) -> String {
+    let mut out = String::new();
+    for (i, chunk) in data.chunks(16).enumerate() {
+        let offset = i * 16;
+        out.push_str(&format!("{offset:08x}  "));
+        for (j, byte) in chunk.iter().enumerate() {
+            if j == 8 {
+                out.push(' ');
+            }
+            out.push_str(&format!("{byte:02x} "));
+        }
+        for _ in chunk.len()..16 {
+            out.push_str("   ");
+        }
+        if chunk.len() <= 8 {
+            out.push(' ');
+        }
+        out.push_str(" |");
+        for &b in chunk {
+            out.push(if b.is_ascii_graphic() || b == b' ' {
+                b as char
+            } else {
+                '.'
+            });
+        }
+        out.push_str("|\n");
+    }
+    out
+}
+
+#[get("/blob/<id>/raw")]
+fn blob_raw(id: &str) -> Result<RawText<String>, RawText<String>> {
+    let content = blob_content(id).map_err(|e| RawText(format!("error: {e}")))?;
+    let text = String::from_utf8(content)
+        .map_err(|_| RawText("error: blob contains non-UTF-8 data".into()))?;
+    Ok(RawText(text))
+}
+
+fn blob_content(id: &str) -> Result<Vec<u8>, String> {
+    Vault::get("blob", id)
 }
 
 #[catch(404)]
@@ -68,20 +174,40 @@ pub async fn launch(config: BunnylolConfig) -> Result<(), Box<rocket::Error>> {
         config.server.address, config.server.port
     );
 
+    write_pid_file();
+
     let figment = rocket::Config::figment()
         .merge(("address", config.server.address.clone()))
         .merge(("port", config.server.port))
         .merge(("log_level", config.server.log_level.clone()))
         .merge(("ident", format!("Bunnylol/{}", env!("CARGO_PKG_VERSION"))));
 
-    rocket::custom(figment)
+    let result = rocket::custom(figment)
         .manage(config)
-        .mount("/", routes![search, health])
+        .mount("/", routes![search, health, blob_view, blob_raw, blob_create])
         .register("/", catchers![not_found])
         .launch()
-        .await?;
+        .await;
+
+    remove_pid_file();
+    result?;
 
     Ok(())
+}
+
+fn write_pid_file() {
+    if let Some(path) = crate::paths::pid_file() {
+        let pid = std::process::id();
+        if let Err(e) = std::fs::write(&path, pid.to_string()) {
+            eprintln!("Warning: failed to write PID file: {e}");
+        }
+    }
+}
+
+fn remove_pid_file() {
+    if let Some(path) = crate::paths::pid_file() {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 fn entrypoint_html() -> String {
@@ -118,10 +244,8 @@ fn entrypoint_html() -> String {
         })
         .collect();
 
-    let env = minijinja::Environment::new();
-    let tmpl = env
-        .template_from_str(ENTRYPOINT_TEMPLATE)
-        .expect("invalid template");
+    let env = create_template_env();
+    let tmpl = env.get_template("bindings.j2").expect("bindings template missing");
     let version = VERSION.trim();
     tmpl.render(context! { logo, commands => view, version })
         .expect("template render failed")

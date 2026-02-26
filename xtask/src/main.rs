@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const APP_NAME: &str = "Lolabunny";
-const LIB_NAME: &str = "libbunnylol.a";
-const CARGO_FEATURES: &[&str] = &["server"];
+const APP_EXECUTABLE: &str = "LolabunnyApp";
+const SERVER_BIN: &str = "lolabunny";
+const CARGO_FEATURES: &[&str] = &["server", "cli"];
 const MACOS_DEPLOYMENT_TARGET: &str = "12.0";
 
 const ICON_SOURCE: &str = "bunny.png";
@@ -25,11 +26,9 @@ const APP_ICON_SIZES: &[(u32, &str)] = &[
     (1024, "icon_512x512@2x.png"),
 ];
 
-const SYSTEM_LIBS: &[&str] = &["-lz", "-lm", "-lc++", "-liconv", "-lresolv"];
 const PKGINFO_CONTENT: &[u8] = b"APPL????";
 
 const MACOS_SOURCE_DIR: &str = "macos/Lolabunny";
-const BRIDGING_HEADER: &str = "bunnylol.h";
 const SWIFT_SOURCE: &str = "AppDelegate.swift";
 const INFO_PLIST: &str = "Info.plist";
 const ENTITLEMENTS: &str = "Lolabunny.entitlements";
@@ -116,27 +115,35 @@ fn bundle() {
     fs::create_dir_all(&macos_dir).expect("Failed to create MacOS dir");
     fs::create_dir_all(&resources).expect("Failed to create Resources dir");
 
-    println!("Building Rust static library ({rust_target})...");
+    println!("Building lolabunny server binary ({rust_target})...");
     run(Command::new("cargo")
         .args(["build", "--release", "--target", &rust_target])
+        .args(["--bin", SERVER_BIN])
         .args(["--features", &CARGO_FEATURES.join(",")])
         .arg("--no-default-features")
         .current_dir(&root));
 
-    let static_lib = root
+    let server_bin = root
         .join("target")
         .join(&rust_target)
         .join("release")
-        .join(LIB_NAME);
+        .join(SERVER_BIN);
     assert!(
-        static_lib.exists(),
-        "Static library not found at {}",
-        static_lib.display()
+        server_bin.exists(),
+        "Server binary not found at {}",
+        server_bin.display()
     );
+
+    println!("Copying server binary into app bundle...");
+    fs::copy(&server_bin, macos_dir.join(SERVER_BIN)).expect("Failed to copy server binary");
 
     println!("Copying {INFO_PLIST}...");
     fs::copy(macos_src.join(INFO_PLIST), contents.join(INFO_PLIST))
         .expect("Failed to copy Info.plist");
+
+    println!("Copying version file...");
+    fs::copy(root.join(".version"), resources.join(".version"))
+        .expect("Failed to copy .version");
 
     println!("Generating menu bar icons...");
     let icon_src = root.join(ICON_SOURCE);
@@ -147,18 +154,16 @@ fn bundle() {
     println!("Generating app icon...");
     generate_app_icns(icon_src_str, &resources);
 
-    println!("Compiling Swift app (linking Rust, target {swift_target})...");
+    println!("Compiling Swift app (target {swift_target})...");
     run(Command::new("swiftc")
-        .args(["-O", "-target", &swift_target, "-import-objc-header"])
-        .arg(macos_src.join(BRIDGING_HEADER))
+        .args(["-O", "-target", &swift_target])
         .arg(macos_src.join(SWIFT_SOURCE))
-        .arg(&static_lib)
-        .args(SYSTEM_LIBS)
         .arg("-o")
-        .arg(macos_dir.join(APP_NAME)));
+        .arg(macos_dir.join(APP_EXECUTABLE)));
 
-    println!("Stripping binary...");
-    run(Command::new("strip").arg(macos_dir.join(APP_NAME)));
+    println!("Stripping binaries...");
+    run(Command::new("strip").arg(macos_dir.join(APP_EXECUTABLE)));
+    run(Command::new("strip").arg(macos_dir.join(SERVER_BIN)));
 
     fs::write(contents.join("PkgInfo"), PKGINFO_CONTENT).expect("Failed to write PkgInfo");
 

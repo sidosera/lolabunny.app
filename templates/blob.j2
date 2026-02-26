@@ -1,0 +1,66 @@
+{% extends "base.j2" %}
+
+{% block title %}blob {{ id }}{% endblock %}
+{% block pathbar %}
+<nav class="pathbar">
+<a href="/">lolabunny</a>
+<span class="sep">›</span>
+<span class="current">blob</span>
+<span class="sep">›</span>
+<span class="current">{{ id }}</span>
+</nav>
+{% endblock %}
+{% block heading %}blob{% endblock %}
+{% block subtitle %}{{ id }}  ·  {{ size }}{% endblock %}
+
+{% block head %}
+.blob-content {
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--label-primary);
+  tab-size: 4;
+}
+.blob-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--separator);
+}
+.copied {
+  color: var(--green);
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.copied.show { opacity: 1; }
+{% endblock %}
+
+{% block content %}
+<div class="card">
+<div class="blob-actions">
+<span class="copied" id="copied">Copied</span>
+<button class="btn" id="copy-btn">Copy</button>
+<a class="btn" href="/blob/{{ id }}" download="{{ id }}.txt" style="text-decoration:none">Download</a>
+</div>
+<div class="blob-content" id="blob-content">{{ content }}</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('copy-btn').addEventListener('click', () => {
+  const text = document.getElementById('blob-content').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const c = document.getElementById('copied');
+    c.classList.add('show');
+    setTimeout(() => c.classList.remove('show'), 1500);
+  });
+});
+</script>
+{% endblock %}

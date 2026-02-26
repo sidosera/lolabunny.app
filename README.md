@@ -10,17 +10,19 @@ Turn your browser location bar into a command line.
 
 Bunnylol is a lightweight local command router that lets you navigate apps, tools, and internal resources directly from your browser address bar.
 
-Inspired by [bunnylol.rs](https://github.com/facebook/bunnylol.rs), Aaron Lichtman and Joe Previte’s port of [Facebook’s original tool](https://www.quora.com/profile/Charlie-Cheever), with an emphasis on simplicity and zero-friction setup.
+## Nah, why do I need another bookmark app? 
 
+I tried options like native browser bookmarks and tools like Yubnub, but nothing really fit my workflow and after years of using a [similar system](https://www.quora.com/What-is-Facebooks-bunnylol) internally at Facebook, I couldn’t imagine working without it. So I built Lolabunny, inspired by [bunnylol.rs](https://github.com/facebook/bunnylol.rs) by Aaron Lichtman and Joe Previte, with a focus on simplicity and zero-friction setup.
 
-## Install
+## How to install
 
-### Apple Silicon
+Only MacOS is supported atm.
 
-Download from [Releases](https://github.com/sidosera/lolabunny.app/releases)
+### Apple Silicon 
 
-Or using Homebrew
+You can download the latest release for [arm64](https://github.com/sidosera/lolabunny.app/releases)
 
+If you prefer Homebrew
 
 ```sh
 brew tap sidosera/lolacore
@@ -36,7 +38,14 @@ cargo xtask bundle && cp -r target/Bunnylol.app /Applications/
 ```
 
 
-## Setup
+## Few last steps after 
+
+Allow Lolabunny app installation from third party developers
+
+```
+xattr -cr /Applications/Lolabunny.app
+```
+
 
 one. Launch Bunnylol
 two. Enable **Launch at Login**

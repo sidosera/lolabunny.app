@@ -8,6 +8,9 @@
 use clap::{Parser, Subcommand};
 
 #[cfg(feature = "cli")]
+use std::io::{IsTerminal, Read};
+
+#[cfg(feature = "cli")]
 use clap::CommandFactory;
 
 use bunnylol::BunnylolConfig;
@@ -23,12 +26,12 @@ use tabled::{
 };
 
 #[derive(Parser)]
-#[command(name = "bunnylol")]
+#[command(name = "lolabunny")]
 #[command(
     about = "Smart bookmark server and CLI - URL shortcuts for your browser's search bar and terminal"
 )]
 #[command(version)]
-#[command(override_usage = "bunnylol [OPTIONS] [BINDING] [ARGS]")]
+#[command(override_usage = "lolabunny [OPTIONS] [BINDING] [ARGS]")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -44,7 +47,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Run the bunnylol web server
+    /// Run the lolabunny web server
     #[cfg(feature = "server")]
     Serve {
         /// Port to bind the server to (overrides config file)
@@ -68,7 +71,17 @@ enum Commands {
         shell: clap_complete::Shell,
     },
 
-    /// Execute a bunnylol command
+    /// Print the path to the server PID file
+    PidFile,
+
+    /// Store and retrieve encrypted blobs via the lolabunny server
+    #[cfg(feature = "cli")]
+    Blob {
+        /// Blob ID to retrieve (omit to create from stdin)
+        id: Option<String>,
+    },
+
+    /// Execute a lolabunny command
     #[cfg(feature = "cli")]
     #[command(external_subcommand)]
     Command(Vec<String>),
@@ -116,7 +129,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(feature = "cli")]
         Some(Commands::Completion { shell }) => {
             let mut cmd = Cli::command();
-            generate(shell, &mut cmd, "bunnylol", &mut std::io::stdout());
+            generate(shell, &mut cmd, "lolabunny", &mut std::io::stdout());
+            Ok(())
+        }
+
+        Some(Commands::PidFile) => {
+            match bunnylol::paths::pid_file() {
+                Some(p) => println!("{}", p.display()),
+                None => {
+                    eprintln!("Error: could not determine PID file path");
+                    std::process::exit(1);
+                }
+            }
+            Ok(())
+        }
+
+        #[cfg(feature = "cli")]
+        Some(Commands::Blob { id }) => {
+            handle_blob(id.as_deref(), &config)?;
             Ok(())
         }
 
@@ -130,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => {
             let args: Vec<String> = std::env::args()
                 .skip(1)
-                .filter(|arg| !arg.starts_with('-') && arg != "bunnylol")
+                .filter(|arg| !arg.starts_with('-') && arg != "lolabunny")
                 .collect();
 
             if args.is_empty() {
@@ -146,7 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(not(feature = "cli"))]
         None => {
             eprintln!("Error: No command provided. This binary was built without CLI support.");
-            eprintln!("Use 'bunnylol serve' to run the server, or rebuild with --features cli");
+            eprintln!("Use 'lolabunny serve' to run the server, or rebuild with --features cli");
             std::process::exit(1);
         }
     }
@@ -216,6 +246,64 @@ struct CommandRow {
 }
 
 #[cfg(feature = "cli")]
+fn handle_blob(id: Option<&str>, config: &BunnylolConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let base = config.server.get_display_url();
+
+    if let Some(id) = id {
+        let text = ureq::get(&format!("{base}/blob/{id}/raw"))
+            .call()?
+            .body_mut()
+            .read_to_string()?;
+        print!("{text}");
+        return Ok(());
+    }
+
+    if std::io::stdin().is_terminal() {
+        eprintln!("Usage: echo 'content' | lolabunny blob");
+        eprintln!("       lolabunny blob <id>");
+        std::process::exit(1);
+    }
+
+    let mut content = Vec::new();
+    std::io::stdin().read_to_end(&mut content)?;
+    if content.is_empty() {
+        return Err("empty input".into());
+    }
+
+    let resp = ureq::post(&format!("{base}/blob"))
+        .send(&content[..])?
+        .body_mut()
+        .read_to_string()?;
+
+    let parts: Vec<&str> = resp.split('\t').collect();
+    if parts.len() != 3 {
+        return Err(format!("unexpected server response: {resp}").into());
+    }
+    let (id, size, url) = (parts[0], parts[1], parts[2]);
+    let size: usize = size.parse().unwrap_or(0);
+
+    eprintln!();
+    eprintln!("  ID:    {id}");
+    eprintln!("  Size:  {}", format_size(size));
+    eprintln!("  URL:   {url}");
+    eprintln!();
+
+    println!("{id}");
+    Ok(())
+}
+
+#[cfg(feature = "cli")]
+fn format_size(bytes: usize) -> String {
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    }
+}
+
+#[cfg(feature = "cli")]
 fn print_commands() {
     let mut commands = plugins::get_all_commands();
     commands.sort_by(|a, b| {
@@ -277,7 +365,7 @@ fn print_commands() {
         );
 
     println!("\n{}\n", table);
-    println!("💡 Tip: Use 'bunnylol <command>' to open URLs in your browser");
-    println!("   Example: bunnylol ig reels");
+    println!("💡 Tip: Use 'lolabunny <command>' to open URLs in your browser");
+    println!("   Example: lolabunny ig reels");
     println!("   Use --dry-run to preview the URL without opening it\n");
 }

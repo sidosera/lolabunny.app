@@ -18,10 +18,10 @@ categories = ["command-line-utilities", "web-programming::http-server", "develop
 [lib]
 name = "bunnylol"
 path = "src/lib.rs"
-crate-type = ["rlib", "staticlib"]
+crate-type = ["rlib"]
 
 [[bin]]
-name = "bunnylol"
+name = "lolabunny"
 path = "src/main.rs"
 
 [dependencies]
@@ -55,6 +55,10 @@ tabled = { version = "0.20", optional = true }
 terminal_size = { version = "0.4", optional = true }
 whoami = { version = "1.6", optional = true }
 clap_complete = { version = "4.5", optional = true }
+aes-gcm = "0.10.3"
+sha2 = "0.10.9"
+keyring = "3.6.3"
+ureq = "3.2.0"
 
 [features]
 default = ["server", "cli"]

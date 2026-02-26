@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Lolabunny{% endblock %}</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,{{ logo }}">
+<style>
+:root {
+  --label-primary: rgba(0,0,0,0.85);
+  --label-secondary: rgba(0,0,0,0.5);
+  --label-tertiary: rgba(0,0,0,0.25);
+  --label-quaternary: rgba(0,0,0,0.1);
+  --fill-primary: rgba(0,0,0,0.1);
+  --fill-secondary: rgba(0,0,0,0.08);
+  --fill-tertiary: rgba(0,0,0,0.05);
+  --fill-quaternary: rgba(0,0,0,0.03);
+  --separator: rgba(60,60,67,0.29);
+  --bg: #f5f5f7;
+  --surface: #fff;
+  --accent: rgba(0,135,255,1);
+  --accent-secondary: rgba(0,135,255,0.1);
+  --accent-text: rgba(0,120,239,1);
+  --gray: rgba(141,141,146,1);
+  --red: rgba(255,56,60,1);
+  --green: rgba(52,198,88,1);
+  --radius-btn: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow: 0 1px 4px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --label-primary: rgba(255,255,255,1);
+    --label-secondary: rgba(255,255,255,0.55);
+    --label-tertiary: rgba(255,255,255,0.25);
+    --label-quaternary: rgba(255,255,255,0.1);
+    --fill-primary: rgba(255,255,255,0.1);
+    --fill-secondary: rgba(255,255,255,0.08);
+    --fill-tertiary: rgba(255,255,255,0.05);
+    --fill-quaternary: rgba(255,255,255,0.03);
+    --separator: rgba(255,255,255,0.15);
+    --bg: #000;
+    --surface: #1c1c1e;
+    --accent: rgba(10,153,255,1);
+    --accent-secondary: rgba(10,153,255,0.1);
+    --accent-text: rgba(10,153,255,1);
+    --gray: rgba(152,152,157,1);
+    --red: rgba(255,66,69,1);
+    --green: rgba(47,209,87,1);
+    --shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scrollbar-gutter: stable; }
+body {
+  font-family: var(--font-sans);
+  color: var(--label-primary);
+  background: var(--bg);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 680px; margin: 0 auto; padding: 48px 20px 80px; }
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.mono { font-family: var(--font-mono); }
+.text-secondary { color: var(--label-secondary); }
+.text-tertiary { color: var(--label-tertiary); }
+.text-accent { color: var(--accent); }
+
+header { text-align: center; margin-bottom: 36px; }
+header img { width: 56px; height: 56px; border-radius: 14px; }
+header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 14px;
+}
+header p {
+  color: var(--label-secondary);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+nav.pathbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 0.5px solid var(--separator);
+  font-size: 13px;
+  gap: 0;
+}
+nav.pathbar a, nav.pathbar span {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: background .15s;
+}
+nav.pathbar a {
+  color: rgba(76,76,76,1);
+  font-weight: 400;
+}
+nav.pathbar a:hover { background: var(--fill-tertiary); }
+nav.pathbar .sep {
+  color: rgba(153,153,153,1);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 0 1px;
+}
+nav.pathbar .current {
+  color: rgba(76,76,76,1);
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  nav.pathbar a { color: rgba(200,200,200,1); }
+  nav.pathbar .sep { color: rgba(130,130,135,1); }
+  nav.pathbar .current { color: rgba(244,244,244,1); }
+}
+
+footer {
+  text-align: center;
+  padding: 24px 0 0;
+  color: var(--label-tertiary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-btn);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: filter .15s;
+  background: var(--accent-secondary);
+  color: var(--accent-text);
+}
+.btn:hover { filter: brightness(0.92); }
+.btn:active { filter: brightness(0.85); }
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+{% block head %}{% endblock %}
+</style>
+</head>
+<body>
+{% block pathbar %}
+<nav class="pathbar">
+<a href="/">lolabunny</a>
+</nav>
+{% endblock %}
+<div class="wrap">
+<header>
+<img src="data:image/png;base64,{{ logo }}" alt="lolabunny">
+<h1>{% block heading %}lolabunny{% endblock %}</h1>
+<p>{% block subtitle %}{% endblock %}</p>
+</header>
+{% block content %}{% endblock %}
+<footer>{{ version }}</footer>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>
