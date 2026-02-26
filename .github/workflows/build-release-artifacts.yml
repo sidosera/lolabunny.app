@@ -9,8 +9,16 @@ env:
 
 jobs:
   build-server:
-    name: Build Server (ARM64)
+    name: Build Server (${{ matrix.arch }})
     runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rust_target: aarch64-apple-darwin
+            arch: arm64
+          - rust_target: x86_64-apple-darwin
+            arch: x86_64
     permissions:
       contents: write
     steps:
@@ -22,7 +30,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.rust_target }}
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -31,7 +39,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: server-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: server-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Write version file
         run: echo "${{ env.VERSION }}" > .version
@@ -39,22 +47,22 @@ jobs:
       - name: Build server binary
         run: |
           cargo build --release \
-            --target aarch64-apple-darwin \
+            --target ${{ matrix.rust_target }} \
             --bin lolabunny
 
       - name: Package binary
         run: |
-          cp target/aarch64-apple-darwin/release/lolabunny .
-          tar czf "lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz" lolabunny
-          shasum -a 256 "lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz" > "lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz.sha256"
+          cp target/${{ matrix.rust_target }}/release/lolabunny .
+          tar czf "lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz" lolabunny
+          shasum -a 256 "lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz" > "lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz.sha256"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lolabunny-server-${{ env.VERSION }}
+          name: lolabunny-server-${{ env.VERSION }}-${{ matrix.arch }}
           path: |
-            lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz
-            lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz.sha256
+            lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+            lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz.sha256
           retention-days: 90
 
       - name: Upload to release
@@ -63,9 +71,9 @@ jobs:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
           files: |
-            lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz
-            lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz.sha256
-          generate_release_notes: true
+            lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+            lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz.sha256
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

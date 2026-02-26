@@ -39,7 +39,6 @@ cargo xtask bundle && cp -r target/Bunnylol.app /Applications/
 ## The only configuration
 
 
-
 🔖 Allow Lolabunny app installation from third party developers
 
 ```
