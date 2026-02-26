@@ -2,13 +2,13 @@
   <img src="bunny.png" alt="Bunnylol" width="128" height="128">
 </p>
 
-<h3 align="center">Bunnylol</h3>
+<h3 align="center">Lolabunny</h3>
 <p align="center">
 Turn your browser location bar into a command line.
 </p>
 
 
-Bunnylol is a lightweight local command router that lets you navigate apps, tools, and internal resources directly from your browser address bar.
+Lolabunny is a lightweight local command router that lets you navigate apps, tools, and internal resources directly from your browser address bar.
 
 ## Nah, why do I need another bookmark app? 
 
@@ -16,21 +16,19 @@ I tried options like native browser bookmarks and tools like Yubnub, but nothing
 
 ## How to install
 
-Only MacOS is supported atm.
+### Apple Silicon
 
-### Apple Silicon 
+📦 You can [download](https://github.com/sidosera/lolabunny.app/releases) pre-built release.
 
-You can download the latest release for [arm64](https://github.com/sidosera/lolabunny.app/releases)
-
-If you prefer Homebrew
+🍺 Or using Homebrew
 
 ```sh
-brew tap sidosera/lolacore
 brew install --cask bunnylol
+brew tap sidosera/lolacore
 brew install lola-core
 ```
 
-Or build from source
+🛠️ Or build from source
 
 ```sh
 git clone https://github.com/sidosera/lolabunny.app.git && cd lolabunny.app
@@ -38,53 +36,40 @@ cargo xtask bundle && cp -r target/Bunnylol.app /Applications/
 ```
 
 
-## Few last steps after 
+## The only configuration
 
-Allow Lolabunny app installation from third party developers
+
+
+🔖 Allow Lolabunny app installation from third party developers
 
 ```
 xattr -cr /Applications/Lolabunny.app
 ```
 
+🔖 Add to "Launch at Login"
 
-one. Launch Bunnylol
-two. Enable **Launch at Login**
-three. Set your browser search engine to:
+<p align="center">
+  <img src="launch-at-login.png" alt="Bunnylol" height="128">
+</p>
+
+
+🔖 Set your browser search engine to:
 
 ```
 http://localhost:8085/?cmd=%s
 ```
 
+E.g. for [Chrome](https://support.google.com/chrome/answer/95426).
 
 ## Plugins
 
-Commands or plugins are Lua scripts located in:
+Commands (or plugins) are Lua scripts stored at:
 
 ```
 ~/.local/share/bunnylol/commands/
 ```
 
-Example:
-
-```lua
-function info()
-    return {
-        bindings = {"gh", "github"},
-        description = "Open GitHub repositories",
-        example = "gh facebook/react"
-    }
-end
-
-function process(full_args)
-    local args = get_args(full_args, "gh")
-    if args == "" then
-        return "https://github.com"
-    end
-    return "https://github.com/" .. url_encode_path(args)
-end
-```
-
-Install core commands:
+It can be installed like:
 
 ```sh
 brew install lola-core

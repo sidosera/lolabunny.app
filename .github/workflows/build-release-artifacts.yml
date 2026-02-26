@@ -1,4 +1,4 @@
-name: Build macOS App
+name: Build Release Artifacts
 
 on:
   push:
@@ -8,15 +8,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build macOS ARM64
+  build-server:
+    name: Build Server (ARM64)
     runs-on: macos-14
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set version from tag
         run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
@@ -33,7 +31,68 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: macos-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: server-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Write version file
+        run: echo "${{ env.VERSION }}" > .version
+
+      - name: Build server binary
+        run: |
+          cargo build --release \
+            --target aarch64-apple-darwin \
+            --bin lolabunny
+
+      - name: Package binary
+        run: |
+          cp target/aarch64-apple-darwin/release/lolabunny .
+          tar czf "lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz" lolabunny
+          shasum -a 256 "lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz" > "lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lolabunny-server-${{ env.VERSION }}
+          path: |
+            lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz
+            lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz.sha256
+          retention-days: 90
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+          files: |
+            lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz
+            lolabunny-${{ env.VERSION }}-darwin-arm64.tar.gz.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-app:
+    name: Build App (ARM64)
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: app-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Import signing certificate
         if: env.MACOS_CERTIFICATE != ''
@@ -80,17 +139,15 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lolabunny-macos-arm64-${{ env.VERSION }}
+          name: Lolabunny-app-${{ env.VERSION }}
           path: Lolabunny-${{ env.VERSION }}-arm64.dmg
           retention-days: 90
 
-      - name: Create release
+      - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
-          body: |
-            https://github.com/sidosera/lolabunny.app
           files: Lolabunny-${{ env.VERSION }}-arm64.dmg
           generate_release_notes: true
         env:

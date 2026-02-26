@@ -43,27 +43,16 @@ clap = { version = "4.5", features = ["derive"] }
 # Async runtime (used by server, available to CLI)
 tokio = { version = "1.47", features = ["macros", "rt-multi-thread"] }
 
-# These are marked as optional so that we can optimize the size of each binary
-# They are all needed for one or the other
-
-# Web server dependencies
-rocket = { version = "0.5", features = ["json"], optional = true }
-
-# CLI dependencies (optional)
-open = { version = "5.3", optional = true }
-tabled = { version = "0.20", optional = true }
-terminal_size = { version = "0.4", optional = true }
-whoami = { version = "1.6", optional = true }
-clap_complete = { version = "4.5", optional = true }
+rocket = { version = "0.5", features = ["json"] }
+open = "5.3"
+tabled = "0.20"
+terminal_size = "0.4"
+whoami = "1.6"
+clap_complete = "4.5"
 aes-gcm = "0.10.3"
 sha2 = "0.10.9"
 keyring = "3.6.3"
 ureq = "3.2.0"
-
-[features]
-default = ["server", "cli"]
-server = ["rocket"]
-cli = ["open", "tabled", "terminal_size", "whoami", "clap_complete"]
 
 [dev-dependencies]
 assert_cmd = "2.0"

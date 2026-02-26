@@ -2,14 +2,14 @@
 xtask = "run --package xtask --"
 
 # Build release binaries
-server = "build --release --no-default-features --features server"
-cli = "build --release --no-default-features --features cli"
+server = "build --release --bin lolabunny"
+cli = "build --release --bin lolabunny"
 
 # Development shortcuts
-dev-server = "run --no-default-features --features server -- serve"
-dev-cli = "run --no-default-features --features cli --"
+dev-server = "run -- serve"
+dev-cli = "run --"
 
 # Install locally (after cloning repo)
-install-cli = "install --path . --features cli --no-default-features"
-install-server = "install --path . --features server --no-default-features"
-install-both = "install --path ."
+install-cli = "install --path . --bin lolabunny"
+install-server = "install --path . --bin lolabunny"
+install-both = "install --path . --bin lolabunny"

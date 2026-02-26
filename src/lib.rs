@@ -12,7 +12,6 @@ pub mod plugins;
 pub mod utils;
 pub mod vault;
 
-#[cfg(feature = "server")]
 pub mod server;
 
 pub use config::BunnylolConfig;

@@ -6,7 +6,6 @@ use std::process::Command;
 const APP_NAME: &str = "Lolabunny";
 const APP_EXECUTABLE: &str = "LolabunnyApp";
 const SERVER_BIN: &str = "lolabunny";
-const CARGO_FEATURES: &[&str] = &["server", "cli"];
 const MACOS_DEPLOYMENT_TARGET: &str = "12.0";
 
 const ICON_SOURCE: &str = "bunny.png";
@@ -119,8 +118,6 @@ fn bundle() {
     run(Command::new("cargo")
         .args(["build", "--release", "--target", &rust_target])
         .args(["--bin", SERVER_BIN])
-        .args(["--features", &CARGO_FEATURES.join(",")])
-        .arg("--no-default-features")
         .current_dir(&root));
 
     let server_bin = root

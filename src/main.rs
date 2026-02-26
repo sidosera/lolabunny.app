@@ -5,25 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-use clap::{Parser, Subcommand};
-
-#[cfg(feature = "cli")]
 use std::io::{IsTerminal, Read};
 
-#[cfg(feature = "cli")]
-use clap::CommandFactory;
-
-use bunnylol::BunnylolConfig;
-
-#[cfg(feature = "cli")]
-use bunnylol::{History, plugins, utils};
-#[cfg(feature = "cli")]
+use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::generate;
-#[cfg(feature = "cli")]
 use tabled::{
     Table, Tabled,
     settings::{Color, Modify, Style, Width, object::Columns},
 };
+
+use bunnylol::{BunnylolConfig, History, plugins, utils};
 
 #[derive(Parser)]
 #[command(name = "lolabunny")]
@@ -48,7 +39,6 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Run the lolabunny web server
-    #[cfg(feature = "server")]
     Serve {
         /// Port to bind the server to (overrides config file)
         #[arg(short, long)]
@@ -60,11 +50,9 @@ enum Commands {
     },
 
     /// List all available command bindings
-    #[cfg(feature = "cli")]
     Bindings,
 
     /// Generate shell completion scripts
-    #[cfg(feature = "cli")]
     Completion {
         /// Shell to generate completions for
         #[arg(value_enum)]
@@ -75,14 +63,12 @@ enum Commands {
     PidFile,
 
     /// Store and retrieve encrypted blobs via the lolabunny server
-    #[cfg(feature = "cli")]
     Blob {
         /// Blob ID to retrieve (omit to create from stdin)
         id: Option<String>,
     },
 
     /// Execute a lolabunny command
-    #[cfg(feature = "cli")]
     #[command(external_subcommand)]
     Command(Vec<String>),
 }
@@ -100,14 +86,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    #[cfg(feature = "cli")]
     if cli.list {
         print_commands();
         return Ok(());
     }
 
     match cli.command {
-        #[cfg(feature = "server")]
         Some(Commands::Serve { port, address }) => {
             let mut server_config = config.clone();
             if let Some(p) = port {
@@ -120,13 +104,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
 
-        #[cfg(feature = "cli")]
         Some(Commands::Bindings) => {
             print_commands();
             Ok(())
         }
 
-        #[cfg(feature = "cli")]
         Some(Commands::Completion { shell }) => {
             let mut cmd = Cli::command();
             generate(shell, &mut cmd, "lolabunny", &mut std::io::stdout());
@@ -144,19 +126,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
 
-        #[cfg(feature = "cli")]
         Some(Commands::Blob { id }) => {
             handle_blob(id.as_deref(), &config)?;
             Ok(())
         }
 
-        #[cfg(feature = "cli")]
         Some(Commands::Command(args)) => {
             execute_command(args, &config, cli.dry_run)?;
             Ok(())
         }
 
-        #[cfg(feature = "cli")]
         None => {
             let args: Vec<String> = std::env::args()
                 .skip(1)
@@ -172,17 +151,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             execute_command(args, &config, cli.dry_run)?;
             Ok(())
         }
-
-        #[cfg(not(feature = "cli"))]
-        None => {
-            eprintln!("Error: No command provided. This binary was built without CLI support.");
-            eprintln!("Use 'lolabunny serve' to run the server, or rebuild with --features cli");
-            std::process::exit(1);
-        }
     }
 }
 
-#[cfg(feature = "cli")]
 fn execute_command(
     args: Vec<String>,
     config: &BunnylolConfig,
@@ -216,7 +187,6 @@ fn execute_command(
     Ok(())
 }
 
-#[cfg(feature = "cli")]
 fn open_url(url: &str, config: &BunnylolConfig) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(browser) = &config.browser {
         open::with(url, browser).map_err(|e| {
@@ -232,7 +202,6 @@ fn open_url(url: &str, config: &BunnylolConfig) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-#[cfg(feature = "cli")]
 #[derive(Tabled)]
 struct CommandRow {
     #[tabled(rename = "Command")]
@@ -245,7 +214,6 @@ struct CommandRow {
     example: String,
 }
 
-#[cfg(feature = "cli")]
 fn handle_blob(id: Option<&str>, config: &BunnylolConfig) -> Result<(), Box<dyn std::error::Error>> {
     let base = config.server.get_display_url();
 
@@ -292,7 +260,6 @@ fn handle_blob(id: Option<&str>, config: &BunnylolConfig) -> Result<(), Box<dyn 
     Ok(())
 }
 
-#[cfg(feature = "cli")]
 fn format_size(bytes: usize) -> String {
     if bytes < 1024 {
         format!("{bytes} B")
@@ -303,7 +270,6 @@ fn format_size(bytes: usize) -> String {
     }
 }
 
-#[cfg(feature = "cli")]
 fn print_commands() {
     let mut commands = plugins::get_all_commands();
     commands.sort_by(|a, b| {

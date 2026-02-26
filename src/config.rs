@@ -442,7 +442,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "cli")]
     fn test_parse_valid_toml() {
         let toml_str = r#"
             browser = "firefox"
@@ -560,7 +559,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "cli")]
     fn test_parse_server_display_url_from_toml() {
         let toml_str = r#"
             [server]
