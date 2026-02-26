@@ -27,8 +27,8 @@ const APP_ICON_SIZES: &[(u32, &str)] = &[
 
 const PKGINFO_CONTENT: &[u8] = b"APPL????";
 
-const MACOS_SOURCE_DIR: &str = "macos/Lolabunny";
-const SWIFT_SOURCE: &str = "AppDelegate.swift";
+const GADGET_DIR: &str = "gadget";
+const SWIFT_PACKAGE_DIR: &str = "gadget";
 const INFO_PLIST: &str = "Info.plist";
 const ENTITLEMENTS: &str = "Lolabunny.entitlements";
 
@@ -100,7 +100,8 @@ fn bundle() {
     println!();
 
     let root = project_root();
-    let macos_src = root.join(MACOS_SOURCE_DIR);
+    let gadget_src = root.join(GADGET_DIR);
+    let swift_package = root.join(SWIFT_PACKAGE_DIR);
 
     let build_dir = root.join("target/bundle");
     let app_bundle = build_dir.join(format!("{APP_NAME}.app"));
@@ -135,7 +136,7 @@ fn bundle() {
     fs::copy(&server_bin, macos_dir.join(SERVER_BIN)).expect("Failed to copy server binary");
 
     println!("Copying {INFO_PLIST}...");
-    fs::copy(macos_src.join(INFO_PLIST), contents.join(INFO_PLIST))
+    fs::copy(gadget_src.join(INFO_PLIST), contents.join(INFO_PLIST))
         .expect("Failed to copy Info.plist");
 
     println!("Copying version file...");
@@ -151,12 +152,24 @@ fn bundle() {
     println!("Generating app icon...");
     generate_app_icns(icon_src_str, &resources);
 
-    println!("Compiling Swift app (target {swift_target})...");
-    run(Command::new("swiftc")
-        .args(["-O", "-target", &swift_target])
-        .arg(macos_src.join(SWIFT_SOURCE))
-        .arg("-o")
-        .arg(macos_dir.join(APP_EXECUTABLE)));
+    println!("Building Swift app package (target {swift_target})...");
+    run(Command::new("swift")
+        .args(["build", "--package-path"])
+        .arg(&swift_package)
+        .args(["--configuration", "release", "--product", APP_NAME, "--triple", &swift_target]));
+
+    let swift_bin_dir = run_capture(Command::new("swift")
+        .args(["build", "--package-path"])
+        .arg(&swift_package)
+        .args(["--configuration", "release", "--show-bin-path", "--triple", &swift_target]));
+    let swift_bin = PathBuf::from(swift_bin_dir).join(APP_NAME);
+    assert!(
+        swift_bin.exists(),
+        "Swift app executable not found at {}",
+        swift_bin.display()
+    );
+    fs::copy(&swift_bin, macos_dir.join(APP_EXECUTABLE))
+        .expect("Failed to copy Swift app executable");
 
     println!("Stripping binaries...");
     run(Command::new("strip").arg(macos_dir.join(APP_EXECUTABLE)));
@@ -164,7 +177,7 @@ fn bundle() {
 
     fs::write(contents.join("PkgInfo"), PKGINFO_CONTENT).expect("Failed to write PkgInfo");
 
-    codesign(&app_bundle, &macos_src.join(ENTITLEMENTS));
+    codesign(&app_bundle, &gadget_src.join(ENTITLEMENTS));
 
     println!();
     println!("Build complete: {}", app_bundle.display());
@@ -220,4 +233,22 @@ fn run(cmd: &mut Command) {
     if !status.success() {
         panic!("{:?} failed with {status}", cmd.get_program());
     }
+}
+
+fn run_capture(cmd: &mut Command) -> String {
+    let output = cmd.output().unwrap_or_else(|e| {
+        panic!("Failed to run {:?}: {e}", cmd.get_program());
+    });
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        panic!(
+            "{:?} failed with {} stdout={} stderr={}",
+            cmd.get_program(),
+            output.status,
+            stdout,
+            stderr
+        );
+    }
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }

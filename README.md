@@ -36,8 +36,28 @@ cargo xtask bundle && cp -r target/Bunnylol.app /Applications/
 ```
 
 
-## The only configuration
+## Updates (local-first)
 
+Lolabunny is local-first:
+
+- App and server always launch from local binaries/cache.
+- Network is not required for normal usage.
+
+Update behavior:
+
+- The macOS app checks for server updates in the background about once per day.
+- If a newer compatible server version exists, the app downloads it in the background (skipped in Low Power Mode).
+- After download, the app sends a notification asking permission to apply the update.
+
+Server cache is stored under:
+
+```sh
+$XDG_DATA_HOME/bunnylol/servers
+# or ~/.local/share/bunnylol/servers
+```
+
+
+## The only configuration
 
 
 🔖 Allow Lolabunny app installation from third party developers

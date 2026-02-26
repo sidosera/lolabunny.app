@@ -19,7 +19,7 @@ use bunnylol::{BunnylolConfig, History, plugins, utils};
 #[derive(Parser)]
 #[command(name = "lolabunny")]
 #[command(
-    about = "Smart bookmark server and CLI - URL shortcuts for your browser's search bar and terminal"
+    about = "Lightweight local command router that lets you navigate apps, tools, and internal resources with simple commands.",
 )]
 #[command(version)]
 #[command(override_usage = "lolabunny [OPTIONS] [BINDING] [ARGS]")]
