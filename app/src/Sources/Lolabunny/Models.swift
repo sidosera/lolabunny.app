@@ -1,29 +1,19 @@
 import Foundation
 
-struct GitHubRelease: Decodable {
-    let tagName: String
-    let assets: [GitHubAsset]
-
-    private enum CodingKeys: String, CodingKey {
-        case tagName = "tag_name"
-        case assets
-    }
+struct ReleaseInfo {
+    let version: String
+    let assets: [ReleaseAsset]
 }
 
-struct GitHubAsset: Decodable {
+struct ReleaseAsset {
     let name: String
-    let browserDownloadURL: URL
-
-    private enum CodingKeys: String, CodingKey {
-        case name
-        case browserDownloadURL = "browser_download_url"
-    }
+    let downloadURL: URL
 }
 
 struct ReleaseAssetSelection {
     let version: String
-    let archive: GitHubAsset
-    let checksum: GitHubAsset
+    let archive: ReleaseAsset
+    let checksum: ReleaseAsset
 }
 
 struct SemVer: Comparable {

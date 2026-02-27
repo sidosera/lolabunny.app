@@ -4,37 +4,32 @@ import Testing
 
 @MainActor
 struct UpdateLogicTests {
-    private func makeAsset(_ name: String) -> GitHubAsset {
-        GitHubAsset(
+    private func makeAsset(_ name: String) -> ReleaseAsset {
+        ReleaseAsset(
             name: name,
-            browserDownloadURL: URL(string: "https://example.com/\(name)")!
+            downloadURL: URL(string: "https://example.com/\(name)")!
         )
     }
 
-    @Test func gitHubReleaseDecodingMapsSnakeCaseFields() throws {
-        let payload = """
-        {
-          "tag_name": "v1.2.3",
-          "assets": [
-            {
-              "name": "lolabunny-v1.2.3-darwin-universal.tar.gz",
-              "browser_download_url": "https://example.com/archive.tar.gz"
-            }
-          ]
-        }
-        """
+    @Test func selectReleaseAssetsTrimsReleaseVersion() {
+        let app = AppDelegate()
+        let archive = "lolabunny-v1.2.3-darwin-universal.tar.gz"
+        let checksum = archive + ".sha256"
+        let release = ReleaseInfo(
+            version: " v1.2.3 \n",
+            assets: [makeAsset(archive), makeAsset(checksum)]
+        )
 
-        let release = try JSONDecoder().decode(GitHubRelease.self, from: Data(payload.utf8))
-        #expect(release.tagName == "v1.2.3")
-        #expect(release.assets.first?.browserDownloadURL.absoluteString == "https://example.com/archive.tar.gz")
+        let selection = app.selectReleaseAssets(from: release)
+        #expect(selection?.version == "v1.2.3")
     }
 
     @Test func selectReleaseAssetsReturnsUniversalArchiveWithChecksum() {
         let app = AppDelegate()
         let archive = "lolabunny-v1.2.3-darwin-universal.tar.gz"
         let checksum = archive + ".sha256"
-        let release = GitHubRelease(
-            tagName: "v1.2.3",
+        let release = ReleaseInfo(
+            version: "v1.2.3",
             assets: [makeAsset(archive), makeAsset(checksum)]
         )
 
@@ -47,8 +42,8 @@ struct UpdateLogicTests {
     @Test func selectReleaseAssetsRequiresChecksum() {
         let app = AppDelegate()
         let archive = "lolabunny-v1.2.3-darwin-universal.tar.gz"
-        let release = GitHubRelease(
-            tagName: "v1.2.3",
+        let release = ReleaseInfo(
+            version: "v1.2.3",
             assets: [makeAsset(archive)]
         )
 
@@ -71,5 +66,16 @@ struct UpdateLogicTests {
         let contents = "\(hash) *\(archive)\n"
 
         #expect(app.parseExpectedSHA256(contents: contents, archiveName: archive) == hash)
+    }
+
+    @Test func archiveEntryOutputURLRejectsTraversal() {
+        let app = AppDelegate()
+        let baseDir = URL(fileURLWithPath: "/tmp/lolabunny-tests", isDirectory: true)
+
+        let safe = app.archiveEntryOutputURL(baseDir: baseDir, entryName: "./bin/lolabunny")
+        #expect(safe?.path == baseDir.appendingPathComponent("bin/lolabunny").path)
+
+        let blocked = app.archiveEntryOutputURL(baseDir: baseDir, entryName: "../etc/passwd")
+        #expect(blocked == nil)
     }
 }

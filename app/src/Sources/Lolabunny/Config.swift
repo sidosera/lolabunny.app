@@ -1,11 +1,37 @@
 import Cocoa
 
 enum Config {
-    static let bundleIdentifier = "com.sidosera.lolabunny"
+    static let bundleIdentifier = Config.runtimeString(
+        envKey: "LOLABUNNY_BUNDLE_IDENTIFIER",
+        plistKeys: ["LolabunnyBundleIdentifier", "CFBundleIdentifier"]
+    ) ?? ProcessInfo.processInfo.processName
     static let appName = "lolabunny"
     static let displayName = "Lolabunny"
     static let serverPort: UInt16 = 8085
     static let serverBaseURL = URL(string: "http://localhost:\(serverPort)")!
+    static func runtimeString(envKey: String, plistKey: String) -> String? {
+        runtimeString(envKey: envKey, plistKeys: [plistKey])
+    }
+
+    static func runtimeString(envKey: String, plistKeys: [String]) -> String? {
+        let env = ProcessInfo.processInfo.environment
+        if let raw = env[envKey] {
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty {
+                return value
+            }
+        }
+
+        for plistKey in plistKeys {
+            if let raw = Bundle.main.object(forInfoDictionaryKey: plistKey) as? String {
+                let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty {
+                    return value
+                }
+            }
+        }
+        return nil
+    }
 
     enum Icon {
         static let size = NSSize(width: 18, height: 18)
@@ -21,9 +47,18 @@ enum Config {
         static let runtimeDir = NSTemporaryDirectory() + ".lolabunny"
         static let pidFile = runtimeDir + "/pid"
         static let xdgPrefix = "bunnylol"
-        static let githubOwner = "sidosera"
-        static let githubRepo = "lolabunny.app"
-        static let latestReleaseAPI = "https://api.github.com/repos/\(githubOwner)/\(githubRepo)/releases/latest"
+        static let updateProvider = Config.runtimeString(
+            envKey: "LOLABUNNY_UPDATE_PROVIDER",
+            plistKey: "LolabunnyUpdateProvider"
+        ) ?? "GitHub"
+        static let updateGitHubOrg = Config.runtimeString(
+            envKey: "LOLABUNNY_UPDATE_PROVIDER_GITHUB_ORG",
+            plistKey: "LolabunnyUpdateProvider.GitHub.Org"
+        )
+        static let updateGitHubRepository = Config.runtimeString(
+            envKey: "LOLABUNNY_UPDATE_PROVIDER_GITHUB_REPOSITORY",
+            plistKey: "LolabunnyUpdateProvider.GitHub.Repository"
+        )
         static let autoCheckInterval: TimeInterval = 24 * 60 * 60
         static let schedulerTickInterval: TimeInterval = 60 * 60
         static let dataHome: String = {

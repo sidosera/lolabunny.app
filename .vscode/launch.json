@@ -4,21 +4,21 @@
             "type": "swift",
             "request": "launch",
             "args": [],
-            "cwd": "${workspaceFolder:lolabunny.app}/gadget",
-            "name": "Debug Lolabunny (gadget)",
+            "cwd": "${workspaceFolder:lolabunny.app}/app/src",
+            "name": "Debug Lolabunny (app)",
             "target": "Lolabunny",
             "configuration": "debug",
-            "preLaunchTask": "swift: Build Debug Lolabunny (gadget)"
+            "preLaunchTask": "swift: Build Debug Lolabunny (app)"
         },
         {
             "type": "swift",
             "request": "launch",
             "args": [],
-            "cwd": "${workspaceFolder:lolabunny.app}/gadget",
-            "name": "Release Lolabunny (gadget)",
+            "cwd": "${workspaceFolder:lolabunny.app}/app/src",
+            "name": "Release Lolabunny (app)",
             "target": "Lolabunny",
             "configuration": "release",
-            "preLaunchTask": "swift: Build Release Lolabunny (gadget)"
+            "preLaunchTask": "swift: Build Release Lolabunny (app)"
         }
     ]
 }

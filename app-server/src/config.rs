@@ -87,12 +87,12 @@ pub struct ServerConfig {
     /// Public-facing URL for display in the bindings page
     ///
     /// Smart defaults when protocol is omitted:
-    /// - "bunny.example.com" → "https://bunny.example.com"
-    /// - "localhost" or "127.0.0.1" or "0.0.0.0" → "http://localhost" (or IP)
+    /// - "bunny.example.com" -> "https://bunny.example.com"
+    /// - "localhost" or "127.0.0.1" or "0.0.0.0" -> "http://localhost" (or IP)
     ///
     /// You can also specify the full URL to override:
-    /// - "https://bunny.example.com" → used as-is
-    /// - "http://bunny.local" → used as-is
+    /// - "https://bunny.example.com" -> used as-is
+    /// - "http://bunny.local" -> used as-is
     ///
     /// If not set, defaults to http://localhost:{port}
     #[serde(default)]
@@ -114,8 +114,8 @@ impl ServerConfig {
     /// Get the display URL for the server, normalized with protocol
     ///
     /// Smart defaults when protocol is omitted:
-    /// - Public domains (e.g., "bunny.example.com") → "https://bunny.example.com"
-    /// - Local addresses (localhost, 127.0.0.1, 0.0.0.0) → "http://localhost" (or IP)
+    /// - Public domains (e.g., "bunny.example.com") -> "https://bunny.example.com"
+    /// - Local addresses (localhost, 127.0.0.1, 0.0.0.0) -> "http://localhost" (or IP)
     ///
     /// If server_display_url is not set, returns "http://localhost:{port}"
     pub fn get_display_url(&self) -> String {
@@ -316,11 +316,11 @@ max_entries = {}
 # Server configuration (for bunnylol serve)
 # server_display_url: Public-facing URL shown in the bindings page
 #   Smart defaults when protocol is omitted:
-#     - "bunny.example.com" → "https://bunny.example.com"
-#     - "localhost" or "127.0.0.1" or "0.0.0.0" → "http://localhost" (or IP)
+#     - "bunny.example.com" -> "https://bunny.example.com"
+#     - "localhost" or "127.0.0.1" or "0.0.0.0" -> "http://localhost" (or IP)
 #   You can also specify the full URL:
-#     - "https://bunny.example.com" → used as-is
-#     - "http://bunny.local" → used as-is
+#     - "https://bunny.example.com" -> used as-is
+#     - "http://bunny.local" -> used as-is
 #   If not set, defaults to http://localhost:{{port}}
 [server]
 port = {}

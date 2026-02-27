@@ -26,11 +26,11 @@ jobs:
             target
           key: test-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run Rust tests
-        run: cargo test --workspace
+      - name: Configure CMake
+        run: cmake -B build
 
-      - name: Run Swift tests
-        run: swift test --package-path gadget
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
 
   build-server:
     name: Build Server (${{ matrix.arch }})
@@ -72,6 +72,7 @@ jobs:
       - name: Build server binary
         run: |
           cargo build --release \
+            --manifest-path app-server/Cargo.toml \
             --target ${{ matrix.rust_target }} \
             --bin lolabunny
 
@@ -146,10 +147,13 @@ jobs:
       - name: Write version file
         run: echo "${{ env.VERSION }}" > .version
 
-      - name: Build app bundle
+      - name: Configure CMake
+        run: cmake -B build -DCODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
         env:
           CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
-        run: cargo xtask bundle
+
+      - name: Build app bundle
+        run: cmake --build build --target bundle
 
       - name: Notarize app
         if: env.APPLE_ID != ''
@@ -164,11 +168,7 @@ jobs:
           rm Lolabunny.zip
 
       - name: Create DMG
-        run: |
-          mkdir -p dmg-staging
-          cp -r target/bundle/Lolabunny.app dmg-staging/
-          ln -s /Applications dmg-staging/Applications
-          hdiutil create -volname "Lolabunny" -srcfolder dmg-staging -ov -format UDZO "Lolabunny-${{ env.VERSION }}-arm64.dmg"
+        run: cmake --build build --target dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

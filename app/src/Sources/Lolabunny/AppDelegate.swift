@@ -9,6 +9,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var updateState = UpdateState()
     var updateTimer: Timer?
     var serverProcess: Process?
+    lazy var updateSource: any UpdateSource = {
+        if Config.Server.updateProvider.caseInsensitiveCompare("GitHub") == .orderedSame {
+            guard let org = Config.Server.updateGitHubOrg else {
+                log("missing GitHub update org config")
+                return DisabledUpdateSource()
+            }
+            guard let repository = Config.Server.updateGitHubRepository else {
+                log("missing GitHub update repository config")
+                return DisabledUpdateSource()
+            }
+            if let source = GitHubUpdateSource(org: org, repository: repository, userAgent: Config.displayName) {
+                return source
+            }
+            log("invalid GitHub update source config: org=\(org), repo=\(repository)")
+            return DisabledUpdateSource()
+        }
+        log("unsupported update provider: \(Config.Server.updateProvider)")
+        return DisabledUpdateSource()
+    }()
     var bundledServerBinary: URL {
         let executableURL = Bundle.main.executableURL ?? Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/\(Config.appName)")
         return executableURL

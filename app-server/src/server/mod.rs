@@ -8,15 +8,15 @@ use rocket::{State, catch, catchers, get, post, routes};
 
 use crate::{BunnylolConfig, History, Vault, plugins, utils};
 
-const LOGO_PNG: &[u8] = include_bytes!("../../bunny.png");
-const VERSION: &str = include_str!("../../.version");
+const LOGO_PNG: &[u8] = include_bytes!("../../../bunny.png");
+const VERSION: &str = include_str!("../../../.version");
 const HTML_404: &str = "<html><body><h1>404 Not Found</h1></body></html>";
 
 fn create_template_env() -> Environment<'static> {
     let mut env = Environment::new();
-    env.add_template("base.j2", include_str!("../../templates/base.j2")).expect("invalid base template");
-    env.add_template("bindings.j2", include_str!("../../templates/bindings.j2")).expect("invalid bindings template");
-    env.add_template("blob.j2", include_str!("../../templates/blob.j2")).expect("invalid blob template");
+    env.add_template("base.j2", include_str!("../templates/base.j2")).expect("invalid base template");
+    env.add_template("bindings.j2", include_str!("../templates/bindings.j2")).expect("invalid bindings template");
+    env.add_template("blob.j2", include_str!("../templates/blob.j2")).expect("invalid blob template");
     env
 }
 

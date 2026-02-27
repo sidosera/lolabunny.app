@@ -1,15 +1,3 @@
 [alias]
-xtask = "run --package xtask --"
-
-# Build release binaries
-server = "build --release --bin lolabunny"
-cli = "build --release --bin lolabunny"
-
-# Development shortcuts
-dev-server = "run -- serve"
-dev-cli = "run --"
-
-# Install locally (after cloning repo)
-install-cli = "install --path . --bin lolabunny"
-install-server = "install --path . --bin lolabunny"
-install-both = "install --path . --bin lolabunny"
+dev = "run -p lolabunny -- serve"
+dev-cli = "run -p lolabunny --"

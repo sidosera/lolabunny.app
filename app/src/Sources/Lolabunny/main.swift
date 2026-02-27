@@ -2,7 +2,7 @@ import Cocoa
 
 let app = NSApplication.shared
 
-let bundleID = Bundle.main.bundleIdentifier ?? Config.bundleIdentifier
+let bundleID = Config.bundleIdentifier
 let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
 if running.count > 1 {
     log("another instance already running, exiting")

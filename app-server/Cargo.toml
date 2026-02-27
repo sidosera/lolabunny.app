@@ -1,0 +1,56 @@
+[package]
+name = "lolabunny"
+version = "0.0.1"
+
+authors = ["Aaron Lichtman <alichtman@meta.com>", "Joe Previte <jprevite@fb.com>", "Sergei Sidorov <sidosera@fb.com>"]
+edition = "2024"
+description = "Command Line for Your Browser Location Bar"
+license = "MIT"
+repository = "https://github.com/sidosera/lolabunny.app"
+readme = "../README.md"
+homepage = "https://github.com/sidosera/lolabunny.app"
+keywords = ["browser", "bookmarks", "shortcuts", "url", "search"]
+categories = ["command-line-utilities", "web-programming::http-server", "development-tools"]
+
+[lib]
+name = "bunnylol"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "lolabunny"
+path = "src/main.rs"
+
+[dependencies]
+# Shared dependencies
+base64 = "0.22"
+minijinja = "2"
+percent-encoding = "2.3"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.9"
+xdg = "3.0"
+
+# Lua plugin system
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+notify = "7.0"
+
+# Command-line parsing (used by both server and CLI)
+clap = { version = "4.5", features = ["derive"] }
+
+# Async runtime (used by server, available to CLI)
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread"] }
+
+rocket = { version = "0.5", features = ["json"] }
+open = "5.3"
+tabled = "0.20"
+terminal_size = "0.4"
+whoami = "1.6"
+clap_complete = "4.5"
+aes-gcm = "0.10.3"
+sha2 = "0.10.9"
+keyring = "3.6.3"
+ureq = "3.2.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"

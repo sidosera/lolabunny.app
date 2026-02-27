@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>LolabunnyApp</string>
+    <string>Lolabunny</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIconName</key>
@@ -28,6 +28,12 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>LolabunnyUpdateProvider</key>
+    <string>GitHub</string>
+    <key>LolabunnyUpdateProvider.GitHub.Org</key>
+    <string>sidosera</string>
+    <key>LolabunnyUpdateProvider.GitHub.Repository</key>
+    <string>lolabunny.app</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

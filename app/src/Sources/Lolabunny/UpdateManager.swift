@@ -1,5 +1,6 @@
 import Cocoa
 import CryptoKit
+import SWCompression
 
 extension AppDelegate {
     func isServerArchiveAsset(_ name: String) -> Bool {
@@ -16,15 +17,15 @@ extension AppDelegate {
         return n.contains("-\(t).") || n.contains("-\(t)-") || n.hasSuffix("\(t).tar.gz")
     }
 
-    func selectReleaseAssets(from release: GitHubRelease) -> ReleaseAssetSelection? {
+    func selectReleaseAssets(from release: ReleaseInfo) -> ReleaseAssetSelection? {
         let archives = release.assets.filter { isServerArchiveAsset($0.name) }
         guard !archives.isEmpty else {
-            log("latest release \(release.tagName) has no macOS server archives")
+            log("latest release \(release.version) has no macOS server archives")
             return nil
         }
 
         let aliases = architectureAliases()
-        var selectedArchive: GitHubAsset?
+        var selectedArchive: ReleaseAsset?
         for alias in aliases {
             if let match = archives.first(where: { matchesArch($0.name, archToken: alias) }) {
                 selectedArchive = match
@@ -40,7 +41,7 @@ extension AppDelegate {
             selectedArchive = archives[0]
         }
         guard let archive = selectedArchive else {
-            log("no matching server archive for architecture \(architectureAliases()) in release \(release.tagName)")
+            log("no matching server archive for architecture \(architectureAliases()) in release \(release.version)")
             return nil
         }
 
@@ -52,7 +53,7 @@ extension AppDelegate {
         }
 
         return ReleaseAssetSelection(
-            version: release.tagName.trimmingCharacters(in: .whitespacesAndNewlines),
+            version: release.version.trimmingCharacters(in: .whitespacesAndNewlines),
             archive: archive,
             checksum: checksum
         )
@@ -119,7 +120,7 @@ extension AppDelegate {
             )
         }
 
-        let latest = latestRelease.tagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let latest = latestRelease.version.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var serverLatest: String?
         var checkError: String?
@@ -180,35 +181,8 @@ extension AppDelegate {
         }
     }
 
-    func fetchLatestRelease() async -> GitHubRelease? {
-        guard let url = URL(string: Config.Server.latestReleaseAPI) else {
-            return nil
-        }
-
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 8
-        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        req.setValue(Config.displayName, forHTTPHeaderField: "User-Agent")
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: req)
-            guard let http = response as? HTTPURLResponse else {
-                log("latest release check failed: missing HTTP response")
-                return nil
-            }
-            guard http.statusCode == 200 else {
-                log("latest release check failed: status=\(http.statusCode)")
-                return nil
-            }
-            guard let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) else {
-                log("latest release check failed: invalid response payload")
-                return nil
-            }
-            return release
-        } catch {
-            log("latest release check failed: \(error.localizedDescription)")
-            return nil
-        }
+    func fetchLatestRelease() async -> ReleaseInfo? {
+        await updateSource.fetchLatestRelease()
     }
 
     func downloadFile(from sourceURL: URL, to destinationURL: URL) async -> Bool {
@@ -290,26 +264,77 @@ extension AppDelegate {
         return true
     }
 
+    func archiveEntryOutputURL(baseDir: URL, entryName: String) -> URL? {
+        var relativePath = entryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if relativePath.isEmpty {
+            return nil
+        }
+        while relativePath.hasPrefix("./") {
+            relativePath.removeFirst(2)
+        }
+        while relativePath.hasPrefix("/") {
+            relativePath.removeFirst()
+        }
+        if relativePath.isEmpty {
+            return nil
+        }
+
+        var outputURL = baseDir
+        for component in relativePath.split(separator: "/") {
+            let part = String(component)
+            if part.isEmpty || part == "." {
+                continue
+            }
+            if part == ".." {
+                return nil
+            }
+            outputURL.appendPathComponent(part, isDirectory: false)
+        }
+
+        let basePath = baseDir.standardizedFileURL.path
+        let outputPath = outputURL.standardizedFileURL.path
+        if outputPath == basePath || outputPath.hasPrefix(basePath + "/") {
+            return outputURL
+        }
+        return nil
+    }
+
     func extractArchive(_ archiveURL: URL, to destinationDir: URL) -> Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
-        proc.arguments = ["-xzf", archiveURL.path, "-C", destinationDir.path]
-        let errPipe = Pipe()
-        proc.standardError = errPipe
-        proc.standardOutput = FileHandle.nullDevice
+        let fm = FileManager.default
         do {
-            try proc.run()
+            let compressedData = try Data(contentsOf: archiveURL, options: [.mappedIfSafe])
+            let tarData = try GzipArchive.unarchive(archive: compressedData)
+            let entries = try TarContainer.open(container: tarData)
+
+            for entry in entries {
+                guard let outputURL = archiveEntryOutputURL(baseDir: destinationDir, entryName: entry.info.name) else {
+                    log("failed to extract archive: unsafe entry path \(entry.info.name)")
+                    return false
+                }
+
+                switch entry.info.type {
+                case .directory:
+                    try fm.createDirectory(at: outputURL, withIntermediateDirectories: true)
+                case .regular, .contiguous:
+                    guard let data = entry.data else {
+                        log("failed to extract archive: missing file data for \(entry.info.name)")
+                        return false
+                    }
+                    try fm.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try data.write(to: outputURL, options: .atomic)
+                    if let permissions = entry.info.permissions {
+                        try fm.setAttributes([.posixPermissions: Int(permissions.rawValue)], ofItemAtPath: outputURL.path)
+                    }
+                default:
+                    log("failed to extract archive: unsupported entry type \(entry.info.type) for \(entry.info.name)")
+                    return false
+                }
+            }
+            return true
         } catch {
-            log("failed to launch tar: \(error.localizedDescription)")
+            log("failed to extract archive: \(error.localizedDescription)")
             return false
         }
-        proc.waitUntilExit()
-        if proc.terminationStatus != 0 {
-            let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            log("failed to extract archive: exit=\(proc.terminationStatus), stderr=\(stderr)")
-            return false
-        }
-        return true
     }
 
     func downloadAndStageServer(selection: ReleaseAssetSelection) async -> URL? {
@@ -319,9 +344,9 @@ extension AppDelegate {
         if fm.isExecutableFile(atPath: targetBinary.path), canLaunchServerBinary(targetBinary) {
             return targetBinary
         }
-        let archiveRemoteURL = selection.archive.browserDownloadURL
+        let archiveRemoteURL = selection.archive.downloadURL
         let checksumAsset = selection.checksum
-        let checksumRemoteURL = checksumAsset.browserDownloadURL
+        let checksumRemoteURL = checksumAsset.downloadURL
 
         guard ensureDirectory(pendingServerRoot) else {
             return nil
