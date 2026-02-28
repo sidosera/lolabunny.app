@@ -2,6 +2,210 @@ import Cocoa
 import CryptoKit
 import SWCompression
 
+@MainActor
+protocol UpdateService {
+    func fetchLatestRelease() async -> ReleaseInfo?
+}
+
+struct DisabledUpdateService: UpdateService {
+    func fetchLatestRelease() async -> ReleaseInfo? {
+        nil
+    }
+}
+
+final class GistUpdateService: UpdateService {
+    private let gistURL: URL
+    private let manifestFileName: String
+    private let userAgent: String
+    private let session: URLSession
+
+    init?(
+        gistID: String,
+        manifestFileName: String,
+        userAgent: String,
+        session: URLSession = .shared
+    ) {
+        let trimmedGistID = gistID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedManifest = manifestFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedGistID.isEmpty, !trimmedManifest.isEmpty else {
+            return nil
+        }
+        guard let gistURL = URL(string: "https://api.github.com/gists/\(trimmedGistID)") else {
+            return nil
+        }
+        self.gistURL = gistURL
+        self.manifestFileName = trimmedManifest
+        self.userAgent = userAgent
+        self.session = session
+    }
+
+    func fetchLatestRelease() async -> ReleaseInfo? {
+        var gistReq = URLRequest(url: gistURL)
+        gistReq.timeoutInterval = 8
+        gistReq.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        gistReq.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+
+        do {
+            let (gistData, gistResponse) = try await session.data(for: gistReq)
+            guard let gistHTTP = gistResponse as? HTTPURLResponse else {
+                log("gist release check failed: missing HTTP response")
+                return nil
+            }
+            guard gistHTTP.statusCode == 200 else {
+                log("gist release check failed: status=\(gistHTTP.statusCode)")
+                return nil
+            }
+            guard let gist = try? JSONDecoder().decode(GistPayload.self, from: gistData) else {
+                log("gist release check failed: invalid gist payload")
+                return nil
+            }
+
+            guard let manifestFile = gist.file(named: manifestFileName),
+                let manifestURL = manifestFile.rawURL
+            else {
+                log("gist release check failed: manifest file missing (\(manifestFileName))")
+                return nil
+            }
+
+            var manifestReq = URLRequest(url: manifestURL)
+            manifestReq.timeoutInterval = 8
+            manifestReq.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            manifestReq.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+
+            let (manifestData, manifestResponse) = try await session.data(for: manifestReq)
+            guard let manifestHTTP = manifestResponse as? HTTPURLResponse else {
+                log("gist release check failed: missing manifest HTTP response")
+                return nil
+            }
+            guard manifestHTTP.statusCode == 200 else {
+                log("gist release check failed: manifest status=\(manifestHTTP.statusCode)")
+                return nil
+            }
+            guard
+                let manifest = try? JSONDecoder().decode(
+                    GistManifestPayload.self, from: manifestData)
+            else {
+                log("gist release check failed: invalid manifest payload")
+                return nil
+            }
+            guard let selected = manifest.selectedRelease() else {
+                log("gist release check failed: no releases in manifest")
+                return nil
+            }
+
+            var assets: [ReleaseAsset] = []
+            for assetName in selected.assets {
+                let trimmedAssetName = assetName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedAssetName.isEmpty else {
+                    continue
+                }
+                guard let file = gist.file(named: trimmedAssetName),
+                    let rawURL = file.rawURL
+                else {
+                    log(
+                        "gist release check failed: missing gist file for asset \(trimmedAssetName)"
+                    )
+                    return nil
+                }
+                assets.append(ReleaseAsset(name: trimmedAssetName, downloadURL: rawURL))
+            }
+
+            let version = selected.version.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !version.isEmpty else {
+                log("gist release check failed: selected release version is empty")
+                return nil
+            }
+            return ReleaseInfo(version: version, assets: assets)
+        } catch {
+            log("gist release check failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+}
+
+private struct GistPayload: Decodable {
+    let files: [String: GistFilePayload]
+
+    func file(named targetName: String) -> GistFilePayload? {
+        if let exact = files[targetName] {
+            return exact
+        }
+        return files.values.first { $0.filename == targetName }
+    }
+}
+
+private struct GistFilePayload: Decodable {
+    let filename: String
+    let rawURL: URL?
+
+    private enum CodingKeys: String, CodingKey {
+        case filename
+        case rawURL = "raw_url"
+    }
+}
+
+private struct GistManifestPayload: Decodable {
+    let latest: String?
+    let releases: [GistManifestReleasePayload]
+
+    private enum CodingKeys: String, CodingKey {
+        case latest
+        case releases
+        case version
+        case assets
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        latest = try container.decodeIfPresent(String.self, forKey: .latest)
+
+        if let list = try container.decodeIfPresent(
+            [GistManifestReleasePayload].self, forKey: .releases),
+            !list.isEmpty
+        {
+            releases = list
+            return
+        }
+
+        if let version = try container.decodeIfPresent(String.self, forKey: .version),
+            let assets = try container.decodeIfPresent([String].self, forKey: .assets)
+        {
+            releases = [GistManifestReleasePayload(version: version, assets: assets)]
+            return
+        }
+
+        throw DecodingError.dataCorruptedError(
+            forKey: .releases,
+            in: container,
+            debugDescription: "Manifest must include 'releases' or ('version' and 'assets')."
+        )
+    }
+
+    func selectedRelease() -> GistManifestReleasePayload? {
+        let available = releases.filter {
+            !$0.version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard !available.isEmpty else {
+            return nil
+        }
+
+        if let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !latest.isEmpty,
+            let matching = available.first(where: {
+                $0.version.trimmingCharacters(in: .whitespacesAndNewlines) == latest
+            })
+        {
+            return matching
+        }
+        return available.last ?? available.first
+    }
+}
+
+private struct GistManifestReleasePayload: Decodable {
+    let version: String
+    let assets: [String]
+}
+
 extension AppDelegate {
     func isServerArchiveAsset(_ name: String) -> Bool {
         let n = name.lowercased()
@@ -33,7 +237,7 @@ extension AppDelegate {
             }
         }
         if selectedArchive == nil,
-           let universal = archives.first(where: { $0.name.lowercased().contains("universal") })
+            let universal = archives.first(where: { $0.name.lowercased().contains("universal") })
         {
             selectedArchive = universal
         }
@@ -41,7 +245,9 @@ extension AppDelegate {
             selectedArchive = archives[0]
         }
         guard let archive = selectedArchive else {
-            log("no matching server archive for architecture \(architectureAliases()) in release \(release.version)")
+            log(
+                "no matching server archive for architecture \(architectureAliases()) in release \(release.version)"
+            )
             return nil
         }
 
@@ -74,7 +280,9 @@ extension AppDelegate {
 
     func scheduleUpdateChecks() {
         updateTimer?.invalidate()
-        updateTimer = Timer.scheduledTimer(withTimeInterval: Config.Server.schedulerTickInterval, repeats: true) { [weak self] _ in
+        updateTimer = Timer.scheduledTimer(
+            withTimeInterval: Config.Server.schedulerTickInterval, repeats: true
+        ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.runUpdateCheck(force: false, notify: false)
             }
@@ -108,8 +316,7 @@ extension AppDelegate {
 
     func performUpdateCheck() async -> UpdateCheckOutcome {
         let now = Date().timeIntervalSince1970
-        let bundled = bundledVersion()
-        let requiredMajor = majorVersion(bundled)
+        let requiredMajor = requiredServerMajor()
         let serverCurrent = await probeRunningServerAsync() ?? currentCompatibleServerVersion()
 
         guard let latestRelease = await fetchLatestRelease() else {
@@ -124,14 +331,19 @@ extension AppDelegate {
 
         var serverLatest: String?
         var checkError: String?
-        if majorVersion(latest) == requiredMajor,
-           compareVersions(latest, serverCurrent) == .orderedDescending
+        if versionMatchesRequiredMajor(latest, requiredMajor: requiredMajor),
+            compareVersions(latest, serverCurrent) == .orderedDescending
         {
+            let hasRunnableLocalServer = resolveLaunchTarget() != nil
             if let selection = selectReleaseAssets(from: latestRelease) {
                 let installedBinary = managedServerBinary(for: latest)
                 let pendingBinary = pendingServerBinary(for: latest)
                 if canLaunchServerBinary(installedBinary) || canLaunchServerBinary(pendingBinary) {
                     serverLatest = latest
+                } else if !hasRunnableLocalServer {
+                    log("auto-download skipped: no runnable local server, user permission required")
+                } else if !allowAutomaticServerDownloads {
+                    log("auto-download skipped: waiting for bootstrap permission")
                 } else if await downloadAndStageServer(selection: selection) != nil {
                     serverLatest = latest
                 } else {
@@ -158,7 +370,8 @@ extension AppDelegate {
 
         if outcome.error != nil {
             if notify {
-                postNotification(title: Config.displayName, body: Config.Notification.updatesCheckFailedMessage)
+                postNotification(
+                    title: Config.displayName, body: Config.Notification.updatesCheckFailedMessage)
             }
             return
         }
@@ -182,29 +395,114 @@ extension AppDelegate {
     }
 
     func fetchLatestRelease() async -> ReleaseInfo? {
-        await updateSource.fetchLatestRelease()
+        await updateService.fetchLatestRelease()
     }
 
-    func downloadFile(from sourceURL: URL, to destinationURL: URL) async -> Bool {
+    nonisolated func downloadFile(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        progress: (@MainActor (Double?) -> Void)? = nil
+    ) async -> Bool {
         var req = URLRequest(url: sourceURL)
         req.timeoutInterval = 120
+        req.cachePolicy = .reloadIgnoringLocalCacheData
         req.setValue(Config.displayName, forHTTPHeaderField: "User-Agent")
+        req.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
 
         do {
-            let (tempURL, response) = try await URLSession.shared.download(for: req)
+            let (bytes, response) = try await URLSession.shared.bytes(for: req)
             guard let http = response as? HTTPURLResponse else {
                 log("download failed: missing HTTP response")
                 return false
             }
-            guard (200 ... 299).contains(http.statusCode) else {
+            guard (200...299).contains(http.statusCode) else {
                 log("download failed: status=\(http.statusCode)")
                 return false
             }
+
             let fm = FileManager.default
+            let expectedBytes =
+                response.expectedContentLength > 0 ? response.expectedContentLength : -1
+            let tempURL =
+                destinationURL
+                .deletingLastPathComponent()
+                .appendingPathComponent(".download-\(UUID().uuidString).tmp")
+            if fm.fileExists(atPath: tempURL.path) {
+                try fm.removeItem(at: tempURL)
+            }
+            guard fm.createFile(atPath: tempURL.path, contents: nil) else {
+                log("download failed: could not create temp file \(tempURL.path)")
+                return false
+            }
+            let handle = try FileHandle(forWritingTo: tempURL)
+            var succeeded = false
+            defer {
+                try? handle.close()
+                if !succeeded {
+                    try? fm.removeItem(at: tempURL)
+                }
+            }
+
+            let chunkSize = 64 * 1024
+            var buffer = Data()
+            buffer.reserveCapacity(chunkSize)
+            var bytesWritten: Int64 = 0
+
+            if let progress {
+                if expectedBytes > 0 {
+                    await progress(0.0)
+                } else {
+                    await progress(nil)
+                }
+            }
+
+            for try await byte in bytes {
+                buffer.append(byte)
+                if buffer.count < chunkSize {
+                    continue
+                }
+                try handle.write(contentsOf: buffer)
+                bytesWritten += Int64(buffer.count)
+                buffer.removeAll(keepingCapacity: true)
+
+                if let progress {
+                    if expectedBytes > 0 {
+                        let fraction = max(
+                            0.0, min(Double(bytesWritten) / Double(expectedBytes), 1.0))
+                        await progress(fraction)
+                    } else {
+                        await progress(nil)
+                    }
+                }
+                if Config.Server.downloadChunkDelayMillis > 0 {
+                    try await Task.sleep(
+                        nanoseconds: Config.Server.downloadChunkDelayMillis * 1_000_000)
+                }
+            }
+
+            if !buffer.isEmpty {
+                try handle.write(contentsOf: buffer)
+                bytesWritten += Int64(buffer.count)
+            }
+            try handle.synchronize()
+
+            if let progress {
+                if expectedBytes > 0 {
+                    let fraction = max(0.0, min(Double(bytesWritten) / Double(expectedBytes), 1.0))
+                    await progress(fraction)
+                } else {
+                    await progress(nil)
+                }
+            }
+
             if fm.fileExists(atPath: destinationURL.path) {
                 try fm.removeItem(at: destinationURL)
             }
             try fm.moveItem(at: tempURL, to: destinationURL)
+            if let progress {
+                await progress(1.0)
+            }
+            succeeded = true
             return true
         } catch {
             log("download failed: \(error.localizedDescription)")
@@ -235,7 +533,8 @@ extension AppDelegate {
                 return hash
             }
             let fileField = fields.dropFirst().map(String.init).joined(separator: " ")
-            let normalized = fileField
+            let normalized =
+                fileField
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .replacingOccurrences(of: "*", with: "")
             if normalized.hasSuffix(archiveName) {
@@ -250,7 +549,9 @@ extension AppDelegate {
             log("failed reading checksum file \(checksumURL.path)")
             return false
         }
-        guard let expected = parseExpectedSHA256(contents: checksumContents, archiveName: archiveName) else {
+        guard
+            let expected = parseExpectedSHA256(contents: checksumContents, archiveName: archiveName)
+        else {
             log("checksum file did not include a valid hash for \(archiveName)")
             return false
         }
@@ -307,7 +608,10 @@ extension AppDelegate {
             let entries = try TarContainer.open(container: tarData)
 
             for entry in entries {
-                guard let outputURL = archiveEntryOutputURL(baseDir: destinationDir, entryName: entry.info.name) else {
+                guard
+                    let outputURL = archiveEntryOutputURL(
+                        baseDir: destinationDir, entryName: entry.info.name)
+                else {
                     log("failed to extract archive: unsafe entry path \(entry.info.name)")
                     return false
                 }
@@ -320,13 +624,19 @@ extension AppDelegate {
                         log("failed to extract archive: missing file data for \(entry.info.name)")
                         return false
                     }
-                    try fm.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try fm.createDirectory(
+                        at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true
+                    )
                     try data.write(to: outputURL, options: .atomic)
                     if let permissions = entry.info.permissions {
-                        try fm.setAttributes([.posixPermissions: Int(permissions.rawValue)], ofItemAtPath: outputURL.path)
+                        try fm.setAttributes(
+                            [.posixPermissions: Int(permissions.rawValue)],
+                            ofItemAtPath: outputURL.path)
                     }
                 default:
-                    log("failed to extract archive: unsupported entry type \(entry.info.type) for \(entry.info.name)")
+                    log(
+                        "failed to extract archive: unsupported entry type \(entry.info.type) for \(entry.info.name)"
+                    )
                     return false
                 }
             }
@@ -352,7 +662,8 @@ extension AppDelegate {
             return nil
         }
 
-        let stagingRoot = pendingServerRoot
+        let stagingRoot =
+            pendingServerRoot
             .appendingPathComponent(".staging-\(UUID().uuidString)", isDirectory: true)
         do {
             try fm.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
@@ -366,17 +677,50 @@ extension AppDelegate {
         let checksumURL = stagingRoot.appendingPathComponent(checksumAsset.name)
 
         log("downloading server \(version) asset \(selection.archive.name)")
-        guard await downloadFile(from: archiveRemoteURL, to: archiveURL) else {
+        guard
+            await downloadFile(
+                from: archiveRemoteURL,
+                to: archiveURL,
+                progress: { [weak self] fraction in
+                    guard let self, self.isBootstrappingServer else {
+                        return
+                    }
+                    let normalized = max(0.0, min(fraction ?? 0.0, 1.0))
+                    let mapped = 0.30 + (normalized * 0.35)
+                    self.setServerSetupState(
+                        .downloading(phase: "Downloading archive", progress: mapped))
+                }
+            )
+        else {
             return nil
         }
-        guard await downloadFile(from: checksumRemoteURL, to: checksumURL) else {
+        guard
+            await downloadFile(
+                from: checksumRemoteURL,
+                to: checksumURL,
+                progress: { [weak self] fraction in
+                    guard let self, self.isBootstrappingServer else {
+                        return
+                    }
+                    let normalized = max(0.0, min(fraction ?? 0.0, 1.0))
+                    let mapped = 0.65 + (normalized * 0.07)
+                    self.setServerSetupState(
+                        .downloading(phase: "Downloading checksum", progress: mapped))
+                }
+            )
+        else {
             return nil
         }
-        guard verifyDownloadedArchive(
-            archiveURL: archiveURL,
-            checksumURL: checksumURL,
-            archiveName: selection.archive.name
-        ) else {
+        if isBootstrappingServer {
+            setServerSetupState(.downloading(phase: "Verifying archive", progress: 0.74))
+        }
+        guard
+            verifyDownloadedArchive(
+                archiveURL: archiveURL,
+                checksumURL: checksumURL,
+                archiveName: selection.archive.name
+            )
+        else {
             return nil
         }
 
@@ -386,6 +730,9 @@ extension AppDelegate {
         } catch {
             log("failed to create extraction directory: \(error.localizedDescription)")
             return nil
+        }
+        if isBootstrappingServer {
+            setServerSetupState(.downloading(phase: "Extracting archive", progress: 0.80))
         }
         guard extractArchive(archiveURL, to: extractedDir) else {
             return nil
@@ -411,6 +758,9 @@ extension AppDelegate {
             try? fm.removeItem(at: finalArchDir)
         }
         do {
+            if isBootstrappingServer {
+                setServerSetupState(.downloading(phase: "Installing server", progress: 0.90))
+            }
             try fm.moveItem(at: extractedDir, to: finalArchDir)
         } catch {
             log("failed to stage server \(version): \(error.localizedDescription)")
@@ -508,11 +858,14 @@ extension AppDelegate {
 
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let previous = await self.probeRunningServerAsync() ?? self.currentCompatibleServerVersion()
+            let previous =
+                await self.probeRunningServerAsync() ?? self.currentCompatibleServerVersion()
 
             guard self.promotePendingServer(version: version) else {
                 self.isApplyingServerUpdate = false
-                self.postNotification(title: Config.displayName, body: Config.Notification.serverUpdateApplyFailedMessage)
+                self.postNotification(
+                    title: Config.displayName,
+                    body: Config.Notification.serverUpdateApplyFailedMessage)
                 return
             }
 
@@ -532,9 +885,13 @@ extension AppDelegate {
             self.isApplyingServerUpdate = false
             if applied {
                 self.updateState.lastNotifiedServerVersion = nil
-                self.postNotification(title: Config.displayName, body: Config.Notification.serverUpdatedMessage(version))
+                self.postNotification(
+                    title: Config.displayName,
+                    body: Config.Notification.serverUpdatedMessage(version))
             } else {
-                self.postNotification(title: Config.displayName, body: Config.Notification.serverUpdateApplyFailedMessage)
+                self.postNotification(
+                    title: Config.displayName,
+                    body: Config.Notification.serverUpdateApplyFailedMessage)
             }
             self.runUpdateCheck(force: true, notify: false)
         }

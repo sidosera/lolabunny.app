@@ -38,3 +38,11 @@ struct UpdateCheckOutcome {
     let serverLatestAvailable: String?
     let error: String?
 }
+
+enum ServerSetupState {
+    case starting
+    case waitingForDownloadPermission(requiredMajor: String)
+    case downloading(phase: String, progress: Double)
+    case ready(version: String)
+    case blocked(message: String)
+}

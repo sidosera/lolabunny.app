@@ -1,0 +1,4 @@
+{
+    "swift.buildPath": "build/swiftpm",
+    "swift.attachmentsPath": "build/attachments"
+}

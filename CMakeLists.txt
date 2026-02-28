@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    message(FATAL_ERROR "In-source builds are not supported. Use: cmake -S . -B build")
+endif()
+
 project(Lolabunny LANGUAGES NONE)
 
 if(NOT APPLE)
@@ -9,7 +14,8 @@ set(LOLABUNNY_APP_NAME "Lolabunny")
 set(LOLABUNNY_SERVER_BIN "lolabunny")
 set(LOLABUNNY_MIN_MACOS "12.0")
 
-set(SWIFT_SCRATCH_PATH "${CMAKE_BINARY_DIR}/swiftpm" CACHE PATH "SwiftPM scratch directory")
+set(SWIFT_SCRATCH_PATH "${CMAKE_BINARY_DIR}/swiftpm" CACHE PATH "SwiftPM scratch directory" FORCE)
+set(CARGO_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo" CACHE PATH "Cargo target directory" FORCE)
 set(CODESIGN_IDENTITY "-" CACHE STRING "Codesign identity ('-' for ad-hoc)")
 
 include("${CMAKE_SOURCE_DIR}/cmake/arch.cmake")

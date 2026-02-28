@@ -3,12 +3,9 @@
 </p>
 
 <h3 align="center">Lolabunny</h3>
-<p align="center">
-Turn your browser location bar into a command line.
-</p>
 
 
-Lolabunny is a lightweight local command router that lets you navigate apps, tools, and internal resources directly from your browser address bar.
+Lightweight local command router that lets you navigate apps, tools, and internal resources directly from your browser address bar.
 
 ## Nah, why do I need another bookmark app? 
 

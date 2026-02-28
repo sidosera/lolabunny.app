@@ -59,6 +59,19 @@ struct UpdateLogicTests {
         #expect(app.parseSemVer("invalid") == nil)
     }
 
+    @Test func versionMatchAllowsUnknownRequiredMajor() {
+        let app = AppDelegate()
+        #expect(app.versionMatchesRequiredMajor("v0.5.2", requiredMajor: ""))
+        #expect(app.versionMatchesRequiredMajor("v2.1.0", requiredMajor: " "))
+    }
+
+    @Test func bootstrapPermissionMessageWithoutMajorIsReadable() {
+        #expect(
+            Config.Notification.serverBootstrapPermissionMessage(requiredMajor: "") ==
+                "Download compatible server now?"
+        )
+    }
+
     @Test func parseExpectedSHA256ExtractsArchiveHash() {
         let app = AppDelegate()
         let archive = "lolabunny-v1.2.3-darwin-universal.tar.gz"

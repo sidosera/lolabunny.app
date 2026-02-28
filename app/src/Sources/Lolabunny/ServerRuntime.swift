@@ -89,41 +89,6 @@ extension AppDelegate {
         return true
     }
 
-    func installBundledServerIfNeeded(version: String) -> URL? {
-        let fm = FileManager.default
-        let source = bundledServerBinary
-        let target = managedServerBinary(for: version)
-
-        guard fm.isExecutableFile(atPath: source.path) else {
-            log("bundled server binary not found at \(source.path)")
-            return nil
-        }
-        guard ensureDirectory(target.deletingLastPathComponent()) else {
-            return nil
-        }
-        if fm.isExecutableFile(atPath: target.path), canLaunchServerBinary(target) {
-            return target
-        }
-
-        do {
-            if fm.fileExists(atPath: target.path) {
-                try fm.removeItem(at: target)
-            }
-            try fm.copyItem(at: source, to: target)
-            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: target.path)
-            guard canLaunchServerBinary(target) else {
-                try? fm.removeItem(at: target)
-                log("bundled server at \(target.path) is not runnable")
-                return nil
-            }
-            log("installed bundled server \(version) to \(target.path)")
-            return target
-        } catch {
-            log("failed to install bundled server \(version): \(error.localizedDescription)")
-            return nil
-        }
-    }
-
     func installedServerVersions() -> [String] {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(atPath: managedServerRoot.path) else {
@@ -163,47 +128,128 @@ extension AppDelegate {
         return lhs.compare(rhs, options: .numeric)
     }
 
+    func requiredServerMajor() -> String {
+        majorVersion(bundledVersion())
+    }
+
+    func versionMatchesRequiredMajor(_ version: String, requiredMajor: String) -> Bool {
+        let expectedMajor = requiredMajor.trimmingCharacters(in: .whitespacesAndNewlines)
+        if expectedMajor.isEmpty {
+            // Dev or non-semver app versions may not define a strict server major.
+            return true
+        }
+        return majorVersion(version) == expectedMajor
+    }
+
     func currentCompatibleServerVersion() -> String {
         let bundled = bundledVersion()
-        let requiredMajor = majorVersion(bundled)
-        return installedCompatibleVersions(requiredMajor: requiredMajor).first ?? bundled
+        return installedCompatibleVersions(requiredMajor: requiredServerMajor()).first ?? bundled
     }
 
     func installedCompatibleVersions(requiredMajor: String) -> [String] {
         installedServerVersions()
-            .filter { majorVersion($0) == requiredMajor }
+            .filter { versionMatchesRequiredMajor($0, requiredMajor: requiredMajor) }
             .sorted { compareVersions($0, $1) == .orderedDescending }
     }
 
     func resolveLaunchTarget() -> (binary: URL, version: String)? {
-        let bundled = bundledVersion()
-        _ = installBundledServerIfNeeded(version: bundled)
-        let requiredMajor = majorVersion(bundled)
-
-        for version in installedCompatibleVersions(requiredMajor: requiredMajor) {
+        for version in installedCompatibleVersions(requiredMajor: requiredServerMajor()) {
             let candidate = managedServerBinary(for: version)
             if canLaunchServerBinary(candidate) {
                 return (candidate, version)
             }
             log("cached server \(version) is not runnable, skipping")
         }
-        if let cachedBundled = installBundledServerIfNeeded(version: bundled) {
-            return (cachedBundled, bundled)
-        }
-        if canLaunchServerBinary(bundledServerBinary) {
-            return (bundledServerBinary, bundled)
-        }
         return nil
     }
 
+    func requestBootstrapPermission(requiredMajor: String) {
+        pendingBootstrapRequiredMajor = requiredMajor
+        setServerSetupState(.waitingForDownloadPermission(requiredMajor: requiredMajor))
+        guard !bootstrapPromptPosted else {
+            return
+        }
+        bootstrapPromptPosted = true
+        log("requesting user permission to download server major \(requiredMajor)")
+        postBootstrapPermissionNotification(requiredMajor: requiredMajor)
+    }
+
+    func beginBootstrapDownload(requiredMajor: String?) async {
+        guard !isBootstrappingServer else {
+            return
+        }
+        let major = requiredMajor ?? pendingBootstrapRequiredMajor ?? requiredServerMajor()
+        isBootstrappingServer = true
+        allowAutomaticServerDownloads = true
+        setServerSetupState(.downloading(phase: "Preparing", progress: 0.05))
+
+        let target = await bootstrapServerFromDistribution(requiredMajor: major)
+        isBootstrappingServer = false
+
+        guard target != nil else {
+            allowAutomaticServerDownloads = false
+            setServerSetupState(.blocked(message: "download failed"))
+            postNotification(title: Config.displayName, body: Config.Notification.serverBootstrapFailedMessage)
+            return
+        }
+
+        bootstrapPromptPosted = false
+        pendingBootstrapRequiredMajor = nil
+        await startServer()
+    }
+
+    func bootstrapServerFromDistribution(requiredMajor: String) async -> (binary: URL, version: String)? {
+        setServerSetupState(.downloading(phase: "Checking latest release", progress: 0.10))
+        guard let release = await fetchLatestRelease() else {
+            log("bootstrap server download skipped: latest release unavailable")
+            return nil
+        }
+        let version = release.version.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard versionMatchesRequiredMajor(version, requiredMajor: requiredMajor) else {
+            log("bootstrap server version \(version) is not compatible with required major \(requiredMajor)")
+            return nil
+        }
+        setServerSetupState(.downloading(phase: "Selecting artifacts", progress: 0.20))
+        guard let selection = selectReleaseAssets(from: release) else {
+            log("bootstrap server selection failed for \(version)")
+            return nil
+        }
+        guard await downloadAndStageServer(selection: selection) != nil else {
+            log("bootstrap server download failed for \(version)")
+            return nil
+        }
+        setServerSetupState(.downloading(phase: "Activating server", progress: 0.92))
+        guard promotePendingServer(version: version) else {
+            log("bootstrap server activation failed for \(version)")
+            return nil
+        }
+        removePendingServer(version: version)
+        let binary = managedServerBinary(for: version)
+        guard canLaunchServerBinary(binary) else {
+            log("bootstrap server \(version) is not runnable after activation")
+            return nil
+        }
+        log("bootstrap server installed \(version) to \(binary.path)")
+        setServerSetupState(.downloading(phase: "Finalizing", progress: 1.0))
+        return (binary, version)
+    }
+
     func startServer() async {
-        guard let target = resolveLaunchTarget() else {
+        setServerSetupState(.starting)
+        allowAutomaticServerDownloads = false
+        let requiredMajor = requiredServerMajor()
+        let target = resolveLaunchTarget()
+        guard let target else {
+            requestBootstrapPermission(requiredMajor: requiredMajor)
             log("no server binary available to launch")
             return
         }
 
+        allowAutomaticServerDownloads = true
+
         if let pid = readPidFile(), isProcessRunning(pid), let runningVersion = await probeRunningServerAsync() {
             if runningVersion == target.version {
+                setServerSetupState(.ready(version: target.version))
                 log("target server already running (pid=\(pid), version=\(runningVersion))")
                 return
             }
@@ -215,6 +261,7 @@ extension AppDelegate {
         }
 
         launchServerProcess(binary: target.binary, version: target.version)
+        setServerSetupState(.ready(version: target.version))
     }
 
     func readPidFile() -> pid_t? {

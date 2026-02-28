@@ -1,4 +1,5 @@
 import Cocoa
+import XDG
 
 enum Config {
     static let bundleIdentifier = Config.runtimeString(
@@ -46,29 +47,39 @@ enum Config {
     enum Server {
         static let runtimeDir = NSTemporaryDirectory() + ".lolabunny"
         static let pidFile = runtimeDir + "/pid"
-        static let xdgPrefix = "bunnylol"
+        static let downloadChunkDelayMillis: UInt64 = {
+            if let raw = Config.runtimeString(
+                envKey: "LOLABUNNY_DOWNLOAD_CHUNK_DELAY_MS",
+                plistKey: "LolabunnyDownloadChunkDelayMs"
+            ),
+                let value = UInt64(raw)
+            {
+                return value
+            }
+            // Keep progress visible during local UX iteration.
+            return 120
+        }()
         static let updateProvider = Config.runtimeString(
             envKey: "LOLABUNNY_UPDATE_PROVIDER",
             plistKey: "LolabunnyUpdateProvider"
-        ) ?? "GitHub"
-        static let updateGitHubOrg = Config.runtimeString(
-            envKey: "LOLABUNNY_UPDATE_PROVIDER_GITHUB_ORG",
-            plistKey: "LolabunnyUpdateProvider.GitHub.Org"
         )
-        static let updateGitHubRepository = Config.runtimeString(
-            envKey: "LOLABUNNY_UPDATE_PROVIDER_GITHUB_REPOSITORY",
-            plistKey: "LolabunnyUpdateProvider.GitHub.Repository"
+        static let updateGitHubGistID = Config.runtimeString(
+            envKey: "LOLABUNNY_UPDATE_PROVIDER_GITHUB_GIST_ID",
+            plistKey: "LolabunnyUpdateProvider.GitHubGist.GistID"
+        )
+        static let updateGitHubGistManifestFile = Config.runtimeString(
+            envKey: "LOLABUNNY_UPDATE_PROVIDER_GITHUB_GIST_MANIFEST_FILE",
+            plistKey: "LolabunnyUpdateProvider.GitHubGist.ManifestFile"
         )
         static let autoCheckInterval: TimeInterval = 24 * 60 * 60
         static let schedulerTickInterval: TimeInterval = 60 * 60
-        static let dataHome: String = {
-            let env = ProcessInfo.processInfo.environment
-            if let xdg = env["XDG_DATA_HOME"], !xdg.isEmpty {
-                return xdg
+        static let dataRoot: String = {
+            if let dirs = try? BaseDirectories(prefixAll: ".lolabunny") {
+                return dirs.dataHomePrefixed.string
             }
-            return NSHomeDirectory() + "/.local/share"
+            return NSHomeDirectory() + "/.local/share/.lolabunny"
         }()
-        static let installRoot = dataHome + "/\(xdgPrefix)/servers"
+        static let installRoot = dataRoot + "/servers"
         static let version: String = {
             guard let path = Bundle.main.path(forResource: ".version", ofType: nil),
                   let contents = try? String(contentsOfFile: path, encoding: .utf8)
@@ -88,12 +99,17 @@ enum Config {
     enum Notification {
         static let identifier = "lolabunny-notification"
         static let updatePromptCategory = "lolabunny-server-update-prompt"
+        static let bootstrapPromptCategory = "lolabunny-server-bootstrap-prompt"
         static let applyUpdateAction = "lolabunny-server-update-apply"
         static let deferUpdateAction = "lolabunny-server-update-later"
+        static let bootstrapDownloadAction = "lolabunny-server-bootstrap-download"
+        static let bootstrapLaterAction = "lolabunny-server-bootstrap-later"
         static let serverVersionKey = "server_version"
+        static let serverRequiredMajorKey = "server_required_major"
         static let updatesCheckFailedMessage = "Update check failed."
         static let noUpdatesMessage = "No updates available."
         static let serverUpdateApplyFailedMessage = "Could not apply downloaded server update."
+        static let serverBootstrapFailedMessage = "Could not download a compatible server."
 
         static func serverUpdateReadyMessage(_ version: String) -> String {
             "Server update \(version) downloaded. Update now?"
@@ -101,6 +117,14 @@ enum Config {
 
         static func serverUpdatedMessage(_ version: String) -> String {
             "Server updated to \(version)."
+        }
+
+        static func serverBootstrapPermissionMessage(requiredMajor: String) -> String {
+            let major = requiredMajor.trimmingCharacters(in: .whitespacesAndNewlines)
+            if major.isEmpty {
+                return "Download compatible server now?"
+            }
+            return "Download compatible server major \(major) now?"
         }
     }
 }

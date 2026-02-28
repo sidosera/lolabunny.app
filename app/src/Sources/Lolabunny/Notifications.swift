@@ -4,6 +4,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     func configureNotificationActions() {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
+
         let applyAction = UNNotificationAction(
             identifier: Config.Notification.applyUpdateAction,
             title: "Update",
@@ -20,7 +21,25 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             intentIdentifiers: [],
             options: []
         )
-        center.setNotificationCategories([category])
+
+        let bootstrapDownloadAction = UNNotificationAction(
+            identifier: Config.Notification.bootstrapDownloadAction,
+            title: "Download",
+            options: [.foreground]
+        )
+        let bootstrapLaterAction = UNNotificationAction(
+            identifier: Config.Notification.bootstrapLaterAction,
+            title: "Later",
+            options: []
+        )
+        let bootstrapCategory = UNNotificationCategory(
+            identifier: Config.Notification.bootstrapPromptCategory,
+            actions: [bootstrapDownloadAction, bootstrapLaterAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        center.setNotificationCategories([category, bootstrapCategory])
     }
 
     func postUpdateReadyNotification(_ version: String) {
@@ -61,6 +80,16 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         }
     }
 
+    func postBootstrapPermissionNotification(requiredMajor: String) {
+        postNotification(
+            identifier: Config.Notification.identifier + ".bootstrap.\(requiredMajor)",
+            title: Config.displayName,
+            body: Config.Notification.serverBootstrapPermissionMessage(requiredMajor: requiredMajor),
+            categoryIdentifier: Config.Notification.bootstrapPromptCategory,
+            userInfo: [Config.Notification.serverRequiredMajorKey: requiredMajor]
+        )
+    }
+
     nonisolated func userNotificationCenter(
         _: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -69,18 +98,28 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         defer { completionHandler() }
 
         let content = response.notification.request.content
-        guard content.categoryIdentifier == Config.Notification.updatePromptCategory else {
+        if content.categoryIdentifier == Config.Notification.updatePromptCategory {
+            guard response.actionIdentifier == Config.Notification.applyUpdateAction else {
+                return
+            }
+            guard let version = content.userInfo[Config.Notification.serverVersionKey] as? String else {
+                log("missing server version in update notification payload")
+                return
+            }
+            Task { @MainActor [weak self] in
+                self?.applyDownloadedServerUpdate(version: version)
+            }
             return
         }
-        guard response.actionIdentifier == Config.Notification.applyUpdateAction else {
-            return
-        }
-        guard let version = content.userInfo[Config.Notification.serverVersionKey] as? String else {
-            log("missing server version in update notification payload")
-            return
-        }
-        Task { @MainActor [weak self] in
-            self?.applyDownloadedServerUpdate(version: version)
+
+        if content.categoryIdentifier == Config.Notification.bootstrapPromptCategory {
+            guard response.actionIdentifier == Config.Notification.bootstrapDownloadAction else {
+                return
+            }
+            let requiredMajor = content.userInfo[Config.Notification.serverRequiredMajorKey] as? String
+            Task { @MainActor [weak self] in
+                await self?.beginBootstrapDownload(requiredMajor: requiredMajor)
+            }
         }
     }
 

@@ -29,11 +29,11 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LolabunnyUpdateProvider</key>
-    <string>GitHub</string>
-    <key>LolabunnyUpdateProvider.GitHub.Org</key>
-    <string>sidosera</string>
-    <key>LolabunnyUpdateProvider.GitHub.Repository</key>
-    <string>lolabunny.app</string>
+    <string>GitHubGist</string>
+    <key>LolabunnyUpdateProvider.GitHubGist.GistID</key>
+    <string></string>
+    <key>LolabunnyUpdateProvider.GitHubGist.ManifestFile</key>
+    <string>manifest.json</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

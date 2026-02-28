@@ -1,14 +1,11 @@
-# bundle.cmake - Build Lolabunny.app from Rust and Swift binaries.
+# bundle.cmake - Build Lolabunny.app from Swift binary.
 
 set(APP_BUNDLE "${BUNDLE_DIR}/${APP_NAME}.app")
 set(CONTENTS_DIR "${APP_BUNDLE}/Contents")
 set(MACOS_DIR "${CONTENTS_DIR}/MacOS")
 set(RESOURCES_DIR "${CONTENTS_DIR}/Resources")
-set(INFO_PLIST "${GADGET_DIR}/Info.plist")
+set(INFO_PLIST "${APP_PACKAGE_DIR}/Info.plist")
 
-if(NOT EXISTS "${RUST_BIN}")
-    message(FATAL_ERROR "Rust binary not found: ${RUST_BIN}")
-endif()
 if(NOT EXISTS "${INFO_PLIST}")
     message(FATAL_ERROR "Info.plist not found: ${INFO_PLIST}")
 endif()
@@ -23,14 +20,8 @@ file(REMOVE_RECURSE "${BUNDLE_DIR}")
 file(MAKE_DIRECTORY "${MACOS_DIR}" "${RESOURCES_DIR}")
 
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${RUST_BIN}" "${MACOS_DIR}/${SERVER_BIN}"
-    COMMAND_ERROR_IS_FATAL ANY
-)
-
-execute_process(
     COMMAND "${SWIFT_EXECUTABLE}" build
-        --package-path "${GADGET_DIR}"
+        --package-path "${APP_PACKAGE_DIR}"
         --scratch-path "${SWIFT_SCRATCH_PATH}"
         --configuration release
         --show-bin-path
@@ -52,7 +43,6 @@ execute_process(
 )
 
 execute_process(COMMAND "${STRIP_EXECUTABLE}" "${MACOS_DIR}/${APP_NAME}" COMMAND_ERROR_IS_FATAL ANY)
-execute_process(COMMAND "${STRIP_EXECUTABLE}" "${MACOS_DIR}/${SERVER_BIN}" COMMAND_ERROR_IS_FATAL ANY)
 
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
