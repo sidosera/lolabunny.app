@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "Lolabunny",
     platforms: [
-        .macOS(.v12),
+        .macOS(.v13),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-testing.git", from: "0.9.0"),
@@ -21,6 +21,9 @@ let package = Package(
             dependencies: [
                 "SWCompression",
                 .product(name: "XDG", package: "swift-xdg"),
+            ],
+            resources: [
+                .copy("Resources/bunny.png"),
             ]
         ),
         .testTarget(

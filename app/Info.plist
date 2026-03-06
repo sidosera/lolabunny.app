@@ -34,11 +34,11 @@
     <string></string>
     <key>LolabunnyUpdateProvider.GitHubGist.ManifestFile</key>
     <string>manifest.json</string>
-    <key>LolabunnyServerPort</key>
+    <key>LolabunnyBackendPort</key>
     <string>8085</string>
-    <key>LolabunnyServerAddress</key>
+    <key>LolabunnyBackendAddress</key>
     <string>127.0.0.1</string>
-    <key>LolabunnyServerLogLevel</key>
+    <key>LolabunnyBackendLogLevel</key>
     <string>normal</string>
     <key>LolabunnyDefaultSearch</key>
     <string>google</string>
@@ -46,7 +46,7 @@
     <string>true</string>
     <key>LolabunnyHistoryMaxEntries</key>
     <string>1000</string>
-    <key>LolabunnyServerWatchdogIntervalSeconds</key>
+    <key>LolabunnyBackendWatchdogIntervalSeconds</key>
     <string>20</string>
     <key>LolabunnyVolumePath</key>
     <string></string>

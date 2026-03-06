@@ -2,6 +2,10 @@ import UserNotifications
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
     func configureNotificationActions() {
+        guard Bundle.main.bundleIdentifier != nil else {
+            log("skipping notification setup – no bundle identifier (debug build?)")
+            return
+        }
         let center = UNUserNotificationCenter.current()
         center.delegate = self
 
@@ -42,13 +46,13 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         center.setNotificationCategories([category, bootstrapCategory])
     }
 
-    func postUpdateReadyNotification(_ version: String) {
+    func postBackendUpdateReadyNotification(_ version: String) {
         postNotification(
             identifier: Config.Notification.identifier + ".update.\(version)",
             title: Config.displayName,
-            body: Config.Notification.serverUpdateReadyMessage(version),
+            body: Config.Notification.backendUpdateReadyMessage(version),
             categoryIdentifier: Config.Notification.updatePromptCategory,
-            userInfo: [Config.Notification.serverVersionKey: version]
+            userInfo: [Config.Notification.backendVersionKey: version]
         )
     }
 
@@ -71,6 +75,10 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         log("posting notification: \(title) – \(body)")
+        guard Bundle.main.bundleIdentifier != nil else {
+            log("skipping notification post – no bundle identifier")
+            return
+        }
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 log("notification error: \(error.localizedDescription)")
@@ -84,9 +92,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         postNotification(
             identifier: Config.Notification.identifier + ".bootstrap.\(requiredMajor)",
             title: Config.displayName,
-            body: Config.Notification.serverBootstrapPermissionMessage(requiredMajor: requiredMajor),
+            body: Config.Notification.backendBootstrapPermissionMessage(requiredMajor: requiredMajor),
             categoryIdentifier: Config.Notification.bootstrapPromptCategory,
-            userInfo: [Config.Notification.serverRequiredMajorKey: requiredMajor]
+            userInfo: [Config.Notification.backendRequiredMajorKey: requiredMajor]
         )
     }
 
@@ -102,12 +110,12 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             guard response.actionIdentifier == Config.Notification.applyUpdateAction else {
                 return
             }
-            guard let version = content.userInfo[Config.Notification.serverVersionKey] as? String else {
-                log("missing server version in update notification payload")
+            guard let version = content.userInfo[Config.Notification.backendVersionKey] as? String else {
+                log("missing backend version in update notification payload")
                 return
             }
             Task { @MainActor [weak self] in
-                self?.applyDownloadedServerUpdate(version: version)
+                self?.applyDownloadedBackendUpdate(version: version)
             }
             return
         }
@@ -116,9 +124,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             guard response.actionIdentifier == Config.Notification.bootstrapDownloadAction else {
                 return
             }
-            let requiredMajor = content.userInfo[Config.Notification.serverRequiredMajorKey] as? String
+            let requiredMajor = content.userInfo[Config.Notification.backendRequiredMajorKey] as? String
             Task { @MainActor [weak self] in
-                await self?.beginBootstrapDownload(requiredMajor: requiredMajor)
+                await self?.beginBootstrapBackendDownload(requiredMajor: requiredMajor)
             }
         }
     }

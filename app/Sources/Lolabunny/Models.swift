@@ -16,30 +16,33 @@ struct ReleaseAssetSelection {
     let checksum: ReleaseAsset
 }
 
+
 struct SemVer: Comparable {
     let major: Int
     let minor: Int
     let patch: Int
 
+    var precedenceScore: Int {
+        (major * 100) + (minor * 10) + patch
+    }
+
     static func < (lhs: SemVer, rhs: SemVer) -> Bool {
-        if lhs.major != rhs.major { return lhs.major < rhs.major }
-        if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
-        return lhs.patch < rhs.patch
+        lhs.precedenceScore < rhs.precedenceScore
     }
 }
 
 struct UpdateState {
     var lastCheckedAt: TimeInterval?
-    var lastNotifiedServerVersion: String?
+    var lastNotifiedBackendVersion: String?
 }
 
 struct UpdateCheckOutcome {
     let checkedAt: TimeInterval
-    let serverLatestAvailable: String?
+    let backendLatestAvailable: String?
     let error: String?
 }
 
-enum ServerSetupState {
+enum BackendSetupState {
     case starting
     case waitingForDownloadPermission(requiredMajor: String)
     case downloading(phase: String, progress: Double)
