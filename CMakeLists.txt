@@ -15,7 +15,6 @@ set(LOLABUNNY_SERVER_BIN "lolabunny")
 set(LOLABUNNY_MIN_MACOS "12.0")
 
 set(SWIFT_SCRATCH_PATH "${CMAKE_BINARY_DIR}/swiftpm" CACHE PATH "SwiftPM scratch directory" FORCE)
-set(CARGO_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo" CACHE PATH "Cargo target directory" FORCE)
 set(CODESIGN_IDENTITY "-" CACHE STRING "Codesign identity ('-' for ad-hoc)")
 
 include("${CMAKE_SOURCE_DIR}/cmake/arch.cmake")
@@ -31,7 +30,7 @@ add_custom_target(dmg DEPENDS app.dmg)
 add_custom_target(install-app DEPENDS app.install)
 add_custom_target(run DEPENDS app.run)
 
-add_custom_target(build-rust DEPENDS app-server.build)
-add_custom_target(build-swift DEPENDS app.build)
+add_custom_target(build-server DEPENDS app-server.build)
+add_custom_target(build-swift DEPENDS app.build app-server.build)
 
 add_custom_target(clean-all DEPENDS app.clean app-server.clean)

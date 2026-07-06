@@ -5,10 +5,6 @@ on:
     branches: [ "**" ]
     tags: [ "v*" ]
 
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_TARGET_DIR: build/cargo
-
 jobs:
   test:
     name: Run Tests
@@ -17,18 +13,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            build/cargo
-          key: test-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Configure CMake
         run: cmake -B build
@@ -45,10 +29,10 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-          - rust_target: aarch64-apple-darwin
-            arch: arm64
-          - rust_target: x86_64-apple-darwin
-            arch: x86_64
+          - arch: arm64
+            swift_triple: arm64-apple-macos12.0
+          - arch: x86_64
+            swift_triple: x86_64-apple-macos12.0
     permissions:
       contents: write
     steps:
@@ -78,38 +62,39 @@ jobs:
           echo "BASE_TAG=${latest_tag}" >> "$GITHUB_ENV"
           echo "VERSION_OFFSET=${offset}" >> "$GITHUB_ENV"
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust_target }}
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            build/cargo
-          key: server-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Write version file
         run: echo "${{ env.VERSION }}" > .version
 
       - name: Build server binary
         run: |
-          cargo build --release \
-            --manifest-path app-server/Cargo.toml \
-            --target ${{ matrix.rust_target }} \
-            --bin lolabunny
+          swift build \
+            --package-path app-server \
+            --scratch-path build/swiftpm/app-server-${{ matrix.arch }} \
+            --configuration release \
+            --product lolabunny \
+            --triple ${{ matrix.swift_triple }}
 
       - name: Package binary
         run: |
           rm -rf package-root
           mkdir -p package-root
-          cp build/cargo/${{ matrix.rust_target }}/release/lolabunny package-root/lolabunny
+          bin_dir="$(swift build \
+            --package-path app-server \
+            --scratch-path build/swiftpm/app-server-${{ matrix.arch }} \
+            --configuration release \
+            --product lolabunny \
+            --triple ${{ matrix.swift_triple }} \
+            --show-bin-path)"
+          cp "$bin_dir/lolabunny" package-root/lolabunny
           (cd package-root && shasum -a 256 lolabunny > lolabunny.sha256)
+          cp .version package-root/.version
+          files=(lolabunny lolabunny.sha256 .version)
+          if [ -d lola-core ]; then
+            cp -R lola-core package-root/
+            files+=(lola-core)
+          fi
           versioned_archive="lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
-          tar czf "${versioned_archive}" -C package-root lolabunny lolabunny.sha256
+          tar czf "${versioned_archive}" -C package-root "${files[@]}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -163,20 +148,6 @@ jobs:
           echo "VERSION=${version}" >> "$GITHUB_ENV"
           echo "BASE_TAG=${latest_tag}" >> "$GITHUB_ENV"
           echo "VERSION_OFFSET=${offset}" >> "$GITHUB_ENV"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            build/cargo
-          key: app-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Import signing certificate
         if: env.MACOS_CERTIFICATE != '' && env.MACOS_CERTIFICATE_PWD != ''
@@ -247,4 +218,3 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

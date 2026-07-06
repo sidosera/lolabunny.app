@@ -1,9 +1,19 @@
 include_guard(GLOBAL)
 include(CMakeParseArguments)
 
+option(SWIFTPM_DISABLE_SANDBOX "Pass --disable-sandbox to SwiftPM invocations." OFF)
+
 function(_swiftpm_require prefix key)
     if(NOT DEFINED ${prefix}_${key} OR "${${prefix}_${key}}" STREQUAL "")
         message(FATAL_ERROR "swiftpm helper: missing required argument '${key}'")
+    endif()
+endfunction()
+
+function(_swiftpm_sandbox_args output_variable)
+    if(SWIFTPM_DISABLE_SANDBOX)
+        set("${output_variable}" "--disable-sandbox" PARENT_SCOPE)
+    else()
+        set("${output_variable}" "" PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -33,8 +43,11 @@ function(swiftpm_add_build_target)
         set(SWIFTPM_CONFIGURATION "release")
     endif()
 
+    _swiftpm_sandbox_args(SWIFTPM_SANDBOX_ARGS)
+
     add_custom_target("${SWIFTPM_TARGET_NAME}"
         COMMAND "${SWIFTPM_SWIFT_EXECUTABLE}" build
+            ${SWIFTPM_SANDBOX_ARGS}
             --package-path "${SWIFTPM_PACKAGE_PATH}"
             --scratch-path "${SWIFTPM_SCRATCH_PATH}"
             --configuration "${SWIFTPM_CONFIGURATION}"
@@ -65,9 +78,12 @@ function(swiftpm_add_test)
         find_program(SWIFTPMTEST_SWIFT_EXECUTABLE NAMES swift REQUIRED)
     endif()
 
+    _swiftpm_sandbox_args(SWIFTPMTEST_SANDBOX_ARGS)
+
     add_test(
         NAME "${SWIFTPMTEST_TEST_NAME}"
         COMMAND "${SWIFTPMTEST_SWIFT_EXECUTABLE}" test
+            ${SWIFTPMTEST_SANDBOX_ARGS}
             --package-path "${SWIFTPMTEST_PACKAGE_PATH}"
             --scratch-path "${SWIFTPMTEST_SCRATCH_PATH}"
     )

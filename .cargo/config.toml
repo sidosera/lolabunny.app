@@ -1,3 +1,0 @@
-[alias]
-dev = "run -p lolabunny -- serve"
-dev-cli = "run -p lolabunny --"

@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION_FILE="$ROOT_DIR/.version"
-SERVER_MANIFEST="$ROOT_DIR/app-server/Cargo.toml"
+SERVER_PACKAGE="$ROOT_DIR/app-server/Package.swift"
 
-if [[ ! -f "$VERSION_FILE" || ! -f "$SERVER_MANIFEST" ]]; then
+if [[ ! -f "$VERSION_FILE" || ! -f "$SERVER_PACKAGE" ]]; then
     echo "Run this script from the lolabunny.app repo root." >&2
     exit 1
 fi
@@ -14,7 +14,7 @@ OLD_VERSION="${1:-${OLD_VERSION:-v1.0.1-beta+10}}"
 NEW_VERSION="${2:-${NEW_VERSION:-v1.1-beta+1}}"
 SERVER_ROOT="${SERVER_ROOT:-$HOME/.local/share/.lolabunny}"
 ARCH_TOKEN="${ARCH_TOKEN:-$(uname -m)}"
-CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/.cache/lolabunny-update-fixture-target}"
+SWIFT_SCRATCH_PATH="${SWIFT_SCRATCH_PATH:-$HOME/.cache/lolabunny-update-fixture-swiftpm}"
 CLEAR_EXISTING="${CLEAR_EXISTING:-1}"
 STOP_RUNNING="${STOP_RUNNING:-1}"
 
@@ -60,9 +60,14 @@ build_and_install() {
     local destination="$2"
 
     printf '%s\n' "$version" > "$VERSION_FILE"
-    CARGO_TARGET_DIR="$CARGO_TARGET_DIR" cargo build --release --manifest-path "$SERVER_MANIFEST" >/dev/null
+    bin_dir="$(swift build \
+        --package-path "$ROOT_DIR/app-server" \
+        --scratch-path "$SWIFT_SCRATCH_PATH" \
+        --configuration release \
+        --product lolabunny \
+        --show-bin-path)"
     mkdir -p "$(dirname "$destination")"
-    install -m 755 "$CARGO_TARGET_DIR/release/lolabunny" "$destination"
+    install -m 755 "$bin_dir/lolabunny" "$destination"
 }
 
 echo "Preparing update fixture: installed=$OLD_VERSION latest=$NEW_VERSION arch=$ARCH_TOKEN"

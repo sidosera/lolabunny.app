@@ -13,6 +13,9 @@ extension AppDelegate {
     }
 
     func backendWatchdogTick() async {
+        #if DEBUG
+        return
+        #else
         if isApplyingBackendUpdate || isBootstrappingBackend || isStartingBackend {
             return
         }
@@ -34,9 +37,13 @@ extension AppDelegate {
             log("watchdog: backend is not running, starting")
         }
         await startBackend()
+        #endif
     }
 
     func startBackend() async {
+        #if DEBUG
+        await startLocalDebugBackend()
+        #else
         guard !isStartingBackend else {
             return
         }
@@ -84,6 +91,24 @@ extension AppDelegate {
             return
         }
         setBackendSetupState(.Ready(version: target.version))
+        #endif
+    }
+
+    func startLocalDebugBackend() async {
+        setBackendSetupState(.GettingReady)
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            if let version = await probeRunningBackendAsync() {
+                setBackendSetupState(.Ready(version: "dev (\(version.trimmingCharacters(in: .whitespacesAndNewlines)))"))
+                return
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        setBackendSetupState(
+            .Failed(
+                message: "run: swift run --package-path app-server lolabunny serve --port \(Config.backendPort)"
+            )
+        )
     }
 
     func requestBootstrapPermission(requiredMajor: String) {

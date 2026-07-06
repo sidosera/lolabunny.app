@@ -1,47 +1,39 @@
-include(FetchContent)
+include("${CMAKE_SOURCE_DIR}/cmake/swiftpm.cmake")
 
-find_program(APP_CARGO_EXECUTABLE NAMES cargo REQUIRED)
+set(APP_SERVER_PACKAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(APP_SERVER_SCRATCH_PATH "${SWIFT_SCRATCH_PATH}/app-server")
 
-if(NOT DEFINED Rust_CARGO_TARGET)
-    message("Rust: Rust_CARGO_TARGET is not defined")
-endif()
+find_program(APP_SERVER_SWIFT_EXECUTABLE NAMES swift REQUIRED)
 
-if(NOT DEFINED CARGO_TARGET_DIR OR "${CARGO_TARGET_DIR}" STREQUAL "")
-    set(CARGO_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo")
-endif()
-
-set(Rust_CARGO_TARGET_DIR "${CARGO_TARGET_DIR}")
-
-FetchContent_Declare(
-    Corrosion
-    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-    GIT_TAG v0.5
+swiftpm_add_build_target(
+    TARGET_NAME app-server.build
+    SWIFT_EXECUTABLE "${APP_SERVER_SWIFT_EXECUTABLE}"
+    PACKAGE_PATH "${APP_SERVER_PACKAGE_DIR}"
+    SCRATCH_PATH "${APP_SERVER_SCRATCH_PATH}"
+    PRODUCT "${LOLABUNNY_SERVER_BIN}"
+    TRIPLE "${SWIFTPM_TARGET_TRIPLE}"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
-FetchContent_MakeAvailable(Corrosion)
-
-corrosion_import_crate(
-    MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml"
-    CRATES "${LOLABUNNY_SERVER_BIN}"
-    PROFILE release
-)
-
-add_custom_target(app-server.build DEPENDS "${LOLABUNNY_SERVER_BIN}")
 
 add_custom_target(app-server.clean
-    COMMAND "${CMAKE_COMMAND}" -E env "CARGO_TARGET_DIR=${CARGO_TARGET_DIR}" "${APP_CARGO_EXECUTABLE}" clean
-        --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml"
+    COMMAND "${APP_SERVER_SWIFT_EXECUTABLE}" package
+        --package-path "${APP_SERVER_PACKAGE_DIR}"
+        --scratch-path "${APP_SERVER_SCRATCH_PATH}"
+        clean
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+        "${APP_SERVER_SCRATCH_PATH}"
+        "${APP_SERVER_PACKAGE_DIR}/.build"
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     VERBATIM
 )
 
 if(BUILD_TESTING)
-    add_test(
-        NAME test.app-server
-        COMMAND "${CMAKE_COMMAND}" -E env "CARGO_TARGET_DIR=${CARGO_TARGET_DIR}" "${APP_CARGO_EXECUTABLE}" test
-            --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml"
-    )
-    set_tests_properties(test.app-server PROPERTIES
+    swiftpm_add_test(
+        TEST_NAME test.app-server
+        SWIFT_EXECUTABLE "${APP_SERVER_SWIFT_EXECUTABLE}"
+        PACKAGE_PATH "${APP_SERVER_PACKAGE_DIR}"
+        SCRATCH_PATH "${APP_SERVER_SCRATCH_PATH}"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-        LABELS "app-server"
+        LABEL "app-server"
     )
 endif()

@@ -18,11 +18,11 @@ ARCH_INPUT="${2:-${ARCH:-$(uname -m)}}"
 case "$ARCH_INPUT" in
   arm64|aarch64)
     ARCH="arm64"
-    RUST_TARGET="aarch64-apple-darwin"
+    SWIFT_TRIPLE="arm64-apple-macos12.0"
     ;;
   x86_64|amd64)
     ARCH="x86_64"
-    RUST_TARGET="x86_64-apple-darwin"
+    SWIFT_TRIPLE="x86_64-apple-macos12.0"
     ;;
   *)
     echo "Unsupported arch: $ARCH_INPUT (expected arm64 or x86_64)" >&2
@@ -30,14 +30,14 @@ case "$ARCH_INPUT" in
     ;;
 esac
 
-BINARY_PATH="${BINARY_PATH:-$ROOT_DIR/build/cargo/$RUST_TARGET/release/lolabunny}"
+BINARY_PATH="${BINARY_PATH:-$ROOT_DIR/build/swiftpm/app-server/$SWIFT_TRIPLE/release/lolabunny}"
 if [[ ! -f "$BINARY_PATH" ]]; then
   cat >&2 <<EOF
 Missing backend binary at:
   $BINARY_PATH
 
 Build it first, for example:
-  cargo build --release --manifest-path "$ROOT_DIR/app-server/Cargo.toml" --target $RUST_TARGET --bin lolabunny
+  swift build --package-path "$ROOT_DIR/app-server" --scratch-path "$ROOT_DIR/build/swiftpm/app-server" --configuration release --product lolabunny --triple $SWIFT_TRIPLE
 EOF
   exit 1
 fi
@@ -58,7 +58,13 @@ trap cleanup EXIT
 cp "$BINARY_PATH" "$tmp_dir/lolabunny"
 chmod 755 "$tmp_dir/lolabunny"
 (cd "$tmp_dir" && shasum -a 256 lolabunny > lolabunny.sha256)
-tar czf "$DOWNLOAD_DIR/$ARCHIVE_NAME" -C "$tmp_dir" lolabunny lolabunny.sha256
+printf '%s\n' "$VERSION" > "$tmp_dir/.version"
+archive_files=(lolabunny lolabunny.sha256 .version)
+if [[ -d "$ROOT_DIR/lola-core" ]]; then
+  cp -R "$ROOT_DIR/lola-core" "$tmp_dir/"
+  archive_files+=(lola-core)
+fi
+tar czf "$DOWNLOAD_DIR/$ARCHIVE_NAME" -C "$tmp_dir" "${archive_files[@]}"
 
 printf '/releases/tag/%s\n' "$VERSION" > "$RELEASES_DIR/latest"
 
