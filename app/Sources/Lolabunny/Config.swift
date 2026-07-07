@@ -2,15 +2,15 @@ import AppKit
 import XDG
 
 enum Config {
-    static let bundleIdentifier = Config.plistString(
+    static var bundleIdentifier: String { Config.plistString(
         keys: ["LolabunnyBundleIdentifier", "CFBundleIdentifier"]
-    ) ?? ProcessInfo.processInfo.processName
+    ) ?? ProcessInfo.processInfo.processName }
     static let appName = "lolabunny"
     static let displayName = "Lolabunny"
-    static let backendPort: UInt16 = Config.plistValue("LolabunnyBackendPort") ?? 18085
+    static var backendPort: UInt16 { Config.plistValue("LolabunnyBackendPort") ?? 18085 }
     /// Same host as `serve --address` (see `LolabunnyBackendAddress`). Avoid `localhost` so health checks do not hit IPv6 while the server listens on IPv4.
-    static let backendAddress: String = Config.plistString("LolabunnyBackendAddress") ?? "127.0.0.1"
-    static let backendBaseURL = URL(string: "http://\(backendAddress):\(backendPort)")!
+    static var backendAddress: String { Config.plistString("LolabunnyBackendAddress") ?? "127.0.0.1" }
+    static var backendBaseURL: URL { URL(string: "http://\(backendAddress):\(backendPort)")! }
 
     static func plistString(_ key: String) -> String? {
         plistString(keys: [key])
@@ -18,6 +18,9 @@ enum Config {
 
     static func plistString(keys: [String]) -> String? {
         for key in keys {
+            if let value = environmentString(for: key) {
+                return value
+            }
             if let raw = Bundle.main.object(forInfoDictionaryKey: key),
                 let value = normalizePlistStringValue(raw)
             {
@@ -29,6 +32,42 @@ enum Config {
         }
         return nil
     }
+
+    private static func environmentString(for key: String) -> String? {
+        let environment = ProcessInfo.processInfo.environment
+        let aliases: [String] = [
+            key,
+            environmentAliases[key] ?? ""
+        ].filter { !$0.isEmpty }
+
+        for alias in aliases {
+            if let raw = environment[alias],
+               let value = normalizePlistStringValue(raw) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static let environmentAliases: [String: String] = [
+        "LolabunnyBackendAddress": "LOLABUNNY_BACKEND_ADDRESS",
+        "LolabunnyBackendLaunchHealthTimeoutSeconds": "LOLABUNNY_BACKEND_LAUNCH_HEALTH_TIMEOUT_SECONDS",
+        "LolabunnyBackendLogLevel": "LOLABUNNY_BACKEND_LOG_LEVEL",
+        "LolabunnyBackendPort": "LOLABUNNY_BACKEND_PORT",
+        "LolabunnyBackendRuntimeDir": "LOLABUNNY_BACKEND_RUNTIME_DIR",
+        "LolabunnyBackendVersion": "LOLABUNNY_BACKEND_VERSION",
+        "LolabunnyBackendWatchdogIntervalSeconds": "LOLABUNNY_BACKEND_WATCHDOG_INTERVAL_SECONDS",
+        "LolabunnyDataRoot": "LOLABUNNY_DATA_ROOT",
+        "LolabunnyDefaultSearch": "LOLABUNNY_DEFAULT_SEARCH",
+        "LolabunnyHistoryEnabled": "LOLABUNNY_HISTORY_ENABLED",
+        "LolabunnyHistoryMaxEntries": "LOLABUNNY_HISTORY_MAX_ENTRIES",
+        "LolabunnyUpdateArchiveBaseURL": "LOLABUNNY_UPDATE_ARCHIVE_BASE_URL",
+        "LolabunnyUpdateArchiveVersion": "LOLABUNNY_UPDATE_ARCHIVE_VERSION",
+        "LolabunnyUpdateLocalStreamDelayMs": "LOLABUNNY_UPDATE_LOCAL_STREAM_DELAY_MS",
+        "LolabunnyUpdateReleaseTag": "LOLABUNNY_UPDATE_RELEASE_TAG",
+        "LolabunnyUpdateReleasesURL": "LOLABUNNY_UPDATE_RELEASES_URL",
+        "LolabunnyVolumePath": "LOLABUNNY_VOLUME_PATH",
+    ]
 
     private static func normalizePlistStringValue(_ raw: Any) -> String? {
         if let string = raw as? String {
@@ -115,15 +154,17 @@ enum Config {
     }
 
     enum Backend {
-        static let runtimeDir = NSTemporaryDirectory() + ".lolabunny"
-        static let pidFile = runtimeDir + "/pid"
-        static let launchArgsSignatureFile = runtimeDir + "/backend-args.sig"
-        static let address = Config.backendAddress
-        static let logLevel = Config.plistString("LolabunnyBackendLogLevel") ?? "normal"
-        static let defaultSearch = Config.plistString("LolabunnyDefaultSearch") ?? "google"
-        static let historyEnabled = Config.plistBool("LolabunnyHistoryEnabled") ?? true
-        static let historyMaxEntries: Int = Config.plistValue("LolabunnyHistoryMaxEntries") ?? 1000
-        static let updateReleasesURL: URL? = {
+        static var runtimeDir: String {
+            Config.plistString("LolabunnyBackendRuntimeDir") ?? (NSTemporaryDirectory() + ".lolabunny")
+        }
+        static var pidFile: String { runtimeDir + "/pid" }
+        static var launchArgsSignatureFile: String { runtimeDir + "/backend-args.sig" }
+        static var address: String { Config.backendAddress }
+        static var logLevel: String { Config.plistString("LolabunnyBackendLogLevel") ?? "normal" }
+        static var defaultSearch: String { Config.plistString("LolabunnyDefaultSearch") ?? "google" }
+        static var historyEnabled: Bool { Config.plistBool("LolabunnyHistoryEnabled") ?? true }
+        static var historyMaxEntries: Int { Config.plistValue("LolabunnyHistoryMaxEntries") ?? 1000 }
+        static var updateReleasesURL: URL? {
             guard let raw = Config.plistString(
                 keys: ["LolabunnyUpdateReleasesURL", "LolabunnyUpdateArchiveBaseURL"]
             ) else {
@@ -147,37 +188,44 @@ enum Config {
                 return nil
             }
             return url.isFileURL ? url.standardizedFileURL : url
-        }()
-        static let updateReleaseTag = Config.plistString(
+        }
+        static var updateReleaseTag: String? { Config.plistString(
             keys: ["LolabunnyUpdateReleaseTag", "LolabunnyUpdateArchiveVersion"]
-        )
-        static let updateLocalStreamDelayMillis: UInt64 =
+        ) }
+        static var updateLocalStreamDelayMillis: UInt64 {
             Config.plistValue("LolabunnyUpdateLocalStreamDelayMs") ?? 0
-        static let volumePath = Config.plistString("LolabunnyVolumePath")
+        }
+        static var volumePath: String? { Config.plistString("LolabunnyVolumePath") }
         static let autoCheckInterval: TimeInterval = 24 * 60 * 60
         static let schedulerTickInterval: TimeInterval = 60 * 60
-        static let watchdogIntervalSeconds: TimeInterval = {
+        static var watchdogIntervalSeconds: TimeInterval {
             Config.plistValue("LolabunnyBackendWatchdogIntervalSeconds") ?? 20
-        }()
-        static let launchHealthTimeoutSeconds: TimeInterval = {
+        }
+        static var launchHealthTimeoutSeconds: TimeInterval {
             Config.plistValue("LolabunnyBackendLaunchHealthTimeoutSeconds") ?? 10
-        }()
-        static let dataRoot: String = {
+        }
+        static var dataRoot: String {
+            if let configured = Config.plistString("LolabunnyDataRoot") {
+                return (configured as NSString).expandingTildeInPath
+            }
             if let dirs = try? BaseDirectories(prefixAll: ".lolabunny") {
                 return dirs.dataHomePrefixed.string
             }
             return NSHomeDirectory() + "/.local/share/.lolabunny"
-        }()
-        static let configFile = dataRoot + "/config.toml"
-        static let installRoot = dataRoot + "/backends"
-        static let version: String = {
+        }
+        static var configFile: String { dataRoot + "/config.toml" }
+        static var installRoot: String { dataRoot + "/backends" }
+        static var version: String {
+            if let configured = Config.plistString("LolabunnyBackendVersion") {
+                return configured
+            }
             guard let path = Bundle.main.path(forResource: ".version", ofType: nil),
                   let contents = try? String(contentsOfFile: path, encoding: .utf8)
             else {
                 return "unknown"
             }
             return contents.trimmingCharacters(in: .whitespacesAndNewlines)
-        }()
+        }
     }
 
     enum Menu {
