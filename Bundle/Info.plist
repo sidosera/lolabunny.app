@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>widget</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.sidosera.lolabunny</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Lolabunny</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>LolabunnyUpdateArchiveBaseURL</key>
+    <string>https://github.com/sidosera/lolabunny.widget/releases</string>
+    <key>LolabunnyUpdateArchiveVersion</key>
+    <string>latest</string>
+    <key>LolabunnyUpdateLocalStreamDelayMs</key>
+    <string>0</string>
+    <key>LolabunnyServerPort</key>
+    <string>18085</string>
+    <key>LolabunnyServerAddress</key>
+    <string>127.0.0.1</string>
+    <key>LolabunnyServerLogLevel</key>
+    <string>normal</string>
+    <key>LolabunnyDefaultSearch</key>
+    <string>google</string>
+    <key>LolabunnyHistoryEnabled</key>
+    <string>true</string>
+    <key>LolabunnyHistoryMaxEntries</key>
+    <string>1000</string>
+    <key>LolabunnyServerWatchdogIntervalSeconds</key>
+    <string>20</string>
+    <key>LolabunnyVolumePath</key>
+    <string></string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Lolabunny needs Accessibility access to read and replace text in other apps when you press ⌘P.</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+</dict>
+</plist>

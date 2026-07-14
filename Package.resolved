@@ -1,0 +1,42 @@
+{
+  "originHash" : "76039f00b97040ad99409146a700a3252a45726053e95891a91817267810884d",
+  "pins" : [
+    {
+      "identity" : "bitbytedata",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tsolomko/BitByteData",
+      "state" : {
+        "revision" : "cdcdc5177ad536cfb11b95c620f926a81014b7fe",
+        "version" : "2.0.4"
+      }
+    },
+    {
+      "identity" : "swcompression",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tsolomko/SWCompression.git",
+      "state" : {
+        "revision" : "390e0b0af8dd19a600005a242a89e570ff482e09",
+        "version" : "4.8.6"
+      }
+    },
+    {
+      "identity" : "swift-system",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-system.git",
+      "state" : {
+        "revision" : "7c6ad0fc39d0763e0b699210e4124afd5041c5df",
+        "version" : "1.6.4"
+      }
+    },
+    {
+      "identity" : "swift-xdg",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Frizlab/swift-xdg.git",
+      "state" : {
+        "revision" : "ac3e885b0de05ad3e57b37769c0ea568413fd9c9",
+        "version" : "2.0.1"
+      }
+    }
+  ],
+  "version" : 3
+}

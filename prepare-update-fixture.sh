@@ -3,17 +3,16 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION_FILE="$ROOT_DIR/.version"
-SERVER_PACKAGE="$ROOT_DIR/app-server/Package.swift"
+PACKAGE_MANIFEST="$ROOT_DIR/Package.swift"
 
-if [[ ! -f "$VERSION_FILE" || ! -f "$SERVER_PACKAGE" ]]; then
+if [[ ! -f "$VERSION_FILE" || ! -f "$PACKAGE_MANIFEST" ]]; then
     echo "Run this script from the lolabunny.app repo root." >&2
     exit 1
 fi
 
 OLD_VERSION="${1:-${OLD_VERSION:-v1.0.1-beta+10}}"
 NEW_VERSION="${2:-${NEW_VERSION:-v1.1-beta+1}}"
-SERVER_ROOT="${SERVER_ROOT:-$HOME/.local/share/.lolabunny}"
-ARCH_TOKEN="${ARCH_TOKEN:-$(uname -m)}"
+DATA_ROOT="${DATA_ROOT:-$HOME/.local/share/.lolabunny}"
 SWIFT_SCRATCH_PATH="${SWIFT_SCRATCH_PATH:-$HOME/.cache/lolabunny-update-fixture-swiftpm}"
 CLEAR_EXISTING="${CLEAR_EXISTING:-1}"
 STOP_RUNNING="${STOP_RUNNING:-1}"
@@ -48,8 +47,8 @@ fi
 
 rm -f "$RUNTIME_DIR/pid" "$RUNTIME_DIR/server-args.sig"
 
-INSTALLED_BINARY="$SERVER_ROOT/servers/$OLD_VERSION/$ARCH_TOKEN/lolabunny"
-LATEST_BINARY="$SERVER_ROOT/servers/.latest/$NEW_VERSION/$ARCH_TOKEN/lolabunny"
+INSTALLED_BINARY="$DATA_ROOT/servers/$OLD_VERSION/server"
+LATEST_BINARY="$DATA_ROOT/servers/$NEW_VERSION.locked/server"
 
 if [[ "$CLEAR_EXISTING" == "1" ]]; then
     rm -rf "$(dirname "$INSTALLED_BINARY")" "$(dirname "$LATEST_BINARY")"
@@ -60,17 +59,25 @@ build_and_install() {
     local destination="$2"
 
     printf '%s\n' "$version" > "$VERSION_FILE"
-    bin_dir="$(swift build \
-        --package-path "$ROOT_DIR/app-server" \
+    swift build \
+        --disable-sandbox \
+        --package-path "$ROOT_DIR" \
         --scratch-path "$SWIFT_SCRATCH_PATH" \
         --configuration release \
-        --product lolabunny \
+        --product server
+
+    bin_dir="$(swift build \
+        --disable-sandbox \
+        --package-path "$ROOT_DIR" \
+        --scratch-path "$SWIFT_SCRATCH_PATH" \
+        --configuration release \
+        --product server \
         --show-bin-path)"
     mkdir -p "$(dirname "$destination")"
-    install -m 755 "$bin_dir/lolabunny" "$destination"
+    install -m 755 "$bin_dir/server" "$destination"
 }
 
-echo "Preparing update fixture: installed=$OLD_VERSION latest=$NEW_VERSION arch=$ARCH_TOKEN"
+echo "Preparing update fixture: installed=$OLD_VERSION latest=$NEW_VERSION"
 build_and_install "$OLD_VERSION" "$INSTALLED_BINARY"
 build_and_install "$NEW_VERSION" "$LATEST_BINARY"
 

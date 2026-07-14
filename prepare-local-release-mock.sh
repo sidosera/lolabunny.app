@@ -30,14 +30,14 @@ case "$ARCH_INPUT" in
     ;;
 esac
 
-BINARY_PATH="${BINARY_PATH:-$ROOT_DIR/build/swiftpm/app-server/$SWIFT_TRIPLE/release/lolabunny}"
+BINARY_PATH="${BINARY_PATH:-$ROOT_DIR/.build/swiftpm/server/$SWIFT_TRIPLE/release/server}"
 if [[ ! -f "$BINARY_PATH" ]]; then
   cat >&2 <<EOF
-Missing backend binary at:
+Missing server binary at:
   $BINARY_PATH
 
 Build it first, for example:
-  swift build --package-path "$ROOT_DIR/app-server" --scratch-path "$ROOT_DIR/build/swiftpm/app-server" --configuration release --product lolabunny --triple $SWIFT_TRIPLE
+  swift build --package-path "$ROOT_DIR" --scratch-path "$ROOT_DIR/.build/swiftpm/server" --configuration release --product server --triple $SWIFT_TRIPLE
 EOF
   exit 1
 fi
@@ -45,7 +45,7 @@ fi
 MOCK_ROOT="${MOCK_ROOT:-$ROOT_DIR/.local-updates}"
 RELEASES_DIR="$MOCK_ROOT/releases"
 DOWNLOAD_DIR="$RELEASES_DIR/download/$VERSION"
-ARCHIVE_NAME="lolabunny-${VERSION}-darwin-${ARCH}.tar.gz"
+ARCHIVE_NAME="server-${VERSION}-darwin-${ARCH}.tar.gz"
 
 mkdir -p "$DOWNLOAD_DIR"
 
@@ -55,11 +55,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cp "$BINARY_PATH" "$tmp_dir/lolabunny"
-chmod 755 "$tmp_dir/lolabunny"
-(cd "$tmp_dir" && shasum -a 256 lolabunny > lolabunny.sha256)
+cp "$BINARY_PATH" "$tmp_dir/server"
+chmod 755 "$tmp_dir/server"
+(cd "$tmp_dir" && shasum -a 256 server > server.sha256)
 printf '%s\n' "$VERSION" > "$tmp_dir/.version"
-archive_files=(lolabunny lolabunny.sha256 .version)
+archive_files=(server server.sha256 .version)
 if [[ -d "$ROOT_DIR/lola-core" ]]; then
   cp -R "$ROOT_DIR/lola-core" "$tmp_dir/"
   archive_files+=(lola-core)

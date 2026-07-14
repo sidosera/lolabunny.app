@@ -14,14 +14,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configure CMake
-        run: cmake -B build
+      - name: Test Swift package
+        run: swift test --disable-swift-testing --scratch-path .build/swiftpm/tests
 
-      - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+      - name: Build SwiftPM products
+        run: |
+          swift build --scratch-path .build/swiftpm/products --product widget
+          swift build --scratch-path .build/swiftpm/products --product widget-server
+          swift build --scratch-path .build/swiftpm/products --product monolith-app
 
-  build-server:
-    name: Build Server (${{ matrix.arch }})
+  build-widget-server:
+    name: Build Widget Server (${{ matrix.arch }})
     runs-on: macos-15
     needs: test
     strategy:
@@ -30,9 +33,9 @@ jobs:
       matrix:
         include:
           - arch: arm64
-            swift_triple: arm64-apple-macos12.0
+            swift_triple: arm64-apple-macos13.0
           - arch: x86_64
-            swift_triple: x86_64-apple-macos12.0
+            swift_triple: x86_64-apple-macos13.0
     permissions:
       contents: write
     steps:
@@ -65,13 +68,12 @@ jobs:
       - name: Write version file
         run: echo "${{ env.VERSION }}" > .version
 
-      - name: Build server binary
+      - name: Build widget-server binary
         run: |
           swift build \
-            --package-path app-server \
-            --scratch-path build/swiftpm/app-server-${{ matrix.arch }} \
+            --scratch-path .build/swiftpm/widget-server-${{ matrix.arch }} \
             --configuration release \
-            --product lolabunny \
+            --product widget-server \
             --triple ${{ matrix.swift_triple }}
 
       - name: Package binary
@@ -79,29 +81,28 @@ jobs:
           rm -rf package-root
           mkdir -p package-root
           bin_dir="$(swift build \
-            --package-path app-server \
-            --scratch-path build/swiftpm/app-server-${{ matrix.arch }} \
+            --scratch-path .build/swiftpm/widget-server-${{ matrix.arch }} \
             --configuration release \
-            --product lolabunny \
+            --product widget-server \
             --triple ${{ matrix.swift_triple }} \
             --show-bin-path)"
-          cp "$bin_dir/lolabunny" package-root/lolabunny
-          (cd package-root && shasum -a 256 lolabunny > lolabunny.sha256)
+          cp "$bin_dir/widget-server" package-root/widget-server
+          (cd package-root && shasum -a 256 widget-server > widget-server.sha256)
           cp .version package-root/.version
-          files=(lolabunny lolabunny.sha256 .version)
+          files=(widget-server widget-server.sha256 .version)
           if [ -d lola-core ]; then
             cp -R lola-core package-root/
             files+=(lola-core)
           fi
-          versioned_archive="lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
+          versioned_archive="widget-server-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
           tar czf "${versioned_archive}" -C package-root "${files[@]}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lolabunny-server-${{ env.VERSION }}-${{ matrix.arch }}
+          name: widget-server-${{ env.VERSION }}-${{ matrix.arch }}
           path: |
-            lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+            widget-server-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
           retention-days: 90
 
       - name: Upload to release
@@ -111,17 +112,24 @@ jobs:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
           files: |
-            lolabunny-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+            widget-server-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-app:
-    name: Build App (ARM64)
+  build-widget:
+    name: Build Widget (ARM64)
     runs-on: macos-15
     needs: test
     permissions:
       contents: write
+    env:
+      CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_ID_PWD: ${{ secrets.APPLE_ID_PWD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -152,8 +160,6 @@ jobs:
       - name: Import signing certificate
         if: env.MACOS_CERTIFICATE != '' && env.MACOS_CERTIFICATE_PWD != ''
         env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
           KEYCHAIN_PWD: ${{ github.run_id }}
         run: |
           echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
@@ -166,46 +172,40 @@ jobs:
 
       - name: Warn when signing secrets are missing
         if: github.ref == 'refs/heads/main'
-        env:
-          CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
         run: |
           if [ -z "$CODESIGN_IDENTITY" ] || [ -z "$MACOS_CERTIFICATE" ] || [ -z "$MACOS_CERTIFICATE_PWD" ]; then
-            echo "::warning::Signing secrets are missing on main; building an unsigned app artifact."
+            echo "::warning::Signing secrets are missing on main; building an unsigned widget artifact."
           fi
 
       - name: Write version file
         run: echo "${{ env.VERSION }}" > .version
 
-      - name: Configure CMake
-        run: cmake -B build -DCODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
-        env:
-          CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
+      - name: Build widget bundle and DMG
+        run: bash scripts/build-release-widget.sh
 
-      - name: Build app bundle
-        run: cmake --build build --target bundle
-
-      - name: Notarize app
+      - name: Notarize widget
         if: env.APPLE_ID != ''
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PWD: ${{ secrets.APPLE_ID_PWD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          ditto -c -k --keepParent build/bundle/Lolabunny.app Lolabunny.zip
+          ditto -c -k --keepParent .build/lolabunny-release/bundle/Lolabunny.app Lolabunny.zip
           xcrun notarytool submit Lolabunny.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PWD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple build/bundle/Lolabunny.app
+          xcrun stapler staple .build/lolabunny-release/bundle/Lolabunny.app
           rm Lolabunny.zip
 
-      - name: Create DMG
-        run: cmake --build build --target dmg
+      - name: Rebuild DMG after stapling
+        if: env.APPLE_ID != ''
+        run: |
+          rm -rf .build/lolabunny-release/dmg-staging .build/lolabunny-release/Lolabunny-${{ env.VERSION }}-arm64.dmg
+          mkdir -p .build/lolabunny-release/dmg-staging
+          cp -R .build/lolabunny-release/bundle/Lolabunny.app .build/lolabunny-release/dmg-staging/Lolabunny.app
+          ln -s /Applications .build/lolabunny-release/dmg-staging/Applications
+          hdiutil create -volname Lolabunny -srcfolder .build/lolabunny-release/dmg-staging -ov -format UDZO .build/lolabunny-release/Lolabunny-${{ env.VERSION }}-arm64.dmg
+          rm -rf .build/lolabunny-release/dmg-staging
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lolabunny-app-${{ env.VERSION }}
-          path: build/Lolabunny-${{ env.VERSION }}-arm64.dmg
+          name: Lolabunny-widget-${{ env.VERSION }}
+          path: .build/lolabunny-release/Lolabunny-${{ env.VERSION }}-arm64.dmg
           retention-days: 90
 
       - name: Upload to release
@@ -214,7 +214,7 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
-          files: build/Lolabunny-${{ env.VERSION }}-arm64.dmg
+          files: .build/lolabunny-release/Lolabunny-${{ env.VERSION }}-arm64.dmg
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

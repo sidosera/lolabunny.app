@@ -7,45 +7,59 @@
 Lightweight fully local command router that let you navigate apps, tools, and internal resources directly from your browser address bar. Type `gh` foo to jump to GitHub issues, `ticket 2500` to open that ticket, or `wiki How to ...` to search your internal wiki. It just issues HTTP redirects, no browser extension, no cloud, no account. 
 
 
-## Nah, why not just use bookmarks?
+## Uhh, why not just use bookmarks?
 
 I tried options like native browser bookmarks and tools like Yubnub, but nothing really fit my workflow and after years of using a [similar system](https://www.quora.com/What-is-Facebooks-bunnylol) internally at Facebook, I couldn’t imagine working without it. So I built Lolabunny, inspired by [bunnylol.rs](https://github.com/facebook/bunnylol.rs) by Aaron Lichtman and Joe Previte, with a focus on simplicity and zero-friction setup.
 
-## 📦 How to install
+## Installation
 
-Lolabunny is basically a small local server binary that handles searches from your browser. It doesn't dictate where you keep the binary or how you run it. 
-For convenience, it comes a desktop widget so you can get set up quickly with minimal hassle.
+Lolabunny is a small local widget-server binary that handles searches from your browser. It doesn't dictate where you keep the binary or how you run it.
+For convenience, distribution includes a macOS menu-bar widget.
 
-See [releases](https://github.com/sidosera/lolabunny.app/releases) for installation options.
+See [releases](https://github.com/sidosera/lolabunny.widget/releases) for installation options.
+
+## Development
+
+Run the bundled local runtime from SwiftPM:
+
+```sh
+swift run monolith-app
+```
+
+It starts the widget-server, fake local release server, and menu-bar widget together. Use custom ports when needed:
+
+```sh
+swift run monolith-app -- --release-port 18091 --widget-server-port 18100
+```
+
+Runtime data lives under `.build/monolith-app`; widget logs are written to `~/Library/Logs/Lolabunny.log`.
 
 ## Extensions
 
 You can extend Lolabunny with Lua. For example, the standard extension package [sidosera/lolacore](https://github.com/sidosera/homebrew-lolacore) is just a handful of Lua files.
 
-You can clone `sidosera/lolacore` and scratch your own extensions bundle e.g. `me/my-workflow` which you can then brew install.
+The default package is `sidosera/lolacore` which includes basic commands. 
 
-```sh
-brew tap me/my-workflow
-brew install my-workflow
-```
+You can create your own command e.g. `~/.lolabunny/my-custom-command.lua` and point lolabunny at it. 
 
-## 🔖 Setup (the only config)
 
-If macOS blocks the app, remove the quarantine attribute:
+## For macOS users
+
+I don't have Apple Developer account so I can't distribute the widget. By default apps installed from outside of AppStore go to quarantine. To fix it:
+
 
 ```sh
 xattr -cr /Applications/Lolabunny.app
 ```
 
-Enable "Launch at Login", then set your browser search engine to:
+Toggle `Launch at Login` and allow the widget to be added to startup folder and set your browser search engine to: `http://localhost:8085/?cmd=%s` (e.g. guide for [Google Chrome](https://support.google.com/chrome/answer/95426)).
 
-```text
-http://localhost:8085/?cmd=%s
-```
-
-E.g. for [Chrome](https://support.google.com/chrome/answer/95426).
+<p align="center">
+  <img src="launch-at-login.png" alt="Bunnylol" width="1096" height="358">
+</p>
 
 ## License
 
-MIT
+It is free. 
 
+MIT

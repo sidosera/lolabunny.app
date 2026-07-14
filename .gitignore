@@ -1,9 +1,9 @@
 /target
-/build
 .DS_Store
 .env
 .env.local
 .build
+.swiftpm/
 .cursor
 .idea
 .local-updates/
