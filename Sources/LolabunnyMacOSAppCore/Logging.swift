@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: Config.bundleIdentifier, category: "widget")
+private let logger = Logger(subsystem: Config.bundleIdentifier, category: "macos-app")
 
 public func log(_ message: String) {
     logger.info("\(message, privacy: .public)")

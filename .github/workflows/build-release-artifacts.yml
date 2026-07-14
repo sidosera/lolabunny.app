@@ -19,12 +19,11 @@ jobs:
 
       - name: Build SwiftPM products
         run: |
-          swift build --scratch-path .build/swiftpm/products --product widget
-          swift build --scratch-path .build/swiftpm/products --product widget-server
-          swift build --scratch-path .build/swiftpm/products --product monolith-app
+          swift build --scratch-path .build/swiftpm/products --product lolabunny-macos-app
+          swift build --scratch-path .build/swiftpm/products --product lolabunny-server
 
-  build-widget-server:
-    name: Build Widget Server (${{ matrix.arch }})
+  build-server:
+    name: Build Server (${{ matrix.arch }})
     runs-on: macos-15
     needs: test
     strategy:
@@ -68,12 +67,12 @@ jobs:
       - name: Write version file
         run: echo "${{ env.VERSION }}" > .version
 
-      - name: Build widget-server binary
+      - name: Build server binary
         run: |
           swift build \
-            --scratch-path .build/swiftpm/widget-server-${{ matrix.arch }} \
+            --scratch-path .build/swiftpm/lolabunny-server-${{ matrix.arch }} \
             --configuration release \
-            --product widget-server \
+            --product lolabunny-server \
             --triple ${{ matrix.swift_triple }}
 
       - name: Package binary
@@ -81,15 +80,15 @@ jobs:
           rm -rf package-root
           mkdir -p package-root
           bin_dir="$(swift build \
-            --scratch-path .build/swiftpm/widget-server-${{ matrix.arch }} \
+            --scratch-path .build/swiftpm/lolabunny-server-${{ matrix.arch }} \
             --configuration release \
-            --product widget-server \
+            --product lolabunny-server \
             --triple ${{ matrix.swift_triple }} \
             --show-bin-path)"
-          cp "$bin_dir/widget-server" package-root/widget-server
-          (cd package-root && shasum -a 256 widget-server > widget-server.sha256)
+          cp "$bin_dir/lolabunny-server" package-root/lolabunny-server
+          (cd package-root && shasum -a 256 lolabunny-server > lolabunny-server.sha256)
           cp .version package-root/.version
-          files=(widget-server widget-server.sha256 .version)
+          files=(lolabunny-server lolabunny-server.sha256 .version)
           if [ -d lola-core ]; then
             cp -R lola-core package-root/
             files+=(lola-core)
@@ -101,8 +100,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}
-          path: |
-            lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+          path: lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
           retention-days: 90
 
       - name: Upload to release
@@ -111,103 +109,13 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
-          files: |
-            lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+          files: lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-monolith-app:
-    name: Build Monolith App (${{ matrix.arch }})
-    runs-on: macos-15
-    needs: test
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - arch: arm64
-            swift_triple: arm64-apple-macos13.0
-          - arch: x86_64
-            swift_triple: x86_64-apple-macos13.0
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set version from nearest tag and commit offset
-        run: |
-          exact_tag="$(git describe --tags --match "v*" --exact-match 2>/dev/null || true)"
-          if [[ -n "$exact_tag" && "$exact_tag" != *+* ]]; then
-            latest_tag="$exact_tag"
-            offset="0"
-            version="$exact_tag"
-          else
-            latest_tag="$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || true)"
-            latest_tag="${latest_tag%%+*}"
-            if [ -z "$latest_tag" ]; then
-              latest_tag="v0.0.0"
-              offset="$(git rev-list --count HEAD)"
-            else
-              offset="$(git rev-list --count "${latest_tag}..HEAD")"
-            fi
-            version="${latest_tag}+${offset}"
-          fi
-          echo "VERSION=${version}" >> "$GITHUB_ENV"
-          echo "BASE_TAG=${latest_tag}" >> "$GITHUB_ENV"
-          echo "VERSION_OFFSET=${offset}" >> "$GITHUB_ENV"
-
-      - name: Write version file
-        run: echo "${{ env.VERSION }}" > .version
-
-      - name: Build monolith-app binary
-        run: |
-          swift build \
-            --scratch-path .build/swiftpm/monolith-app-${{ matrix.arch }} \
-            --configuration release \
-            --product monolith-app \
-            --triple ${{ matrix.swift_triple }}
-
-      - name: Package binary
-        run: |
-          rm -rf package-root
-          mkdir -p package-root
-          bin_dir="$(swift build \
-            --scratch-path .build/swiftpm/monolith-app-${{ matrix.arch }} \
-            --configuration release \
-            --product monolith-app \
-            --triple ${{ matrix.swift_triple }} \
-            --show-bin-path)"
-          cp "$bin_dir/monolith-app" package-root/monolith-app
-          (cd package-root && shasum -a 256 monolith-app > monolith-app.sha256)
-          cp .version package-root/.version
-          versioned_archive="lolabunny-mono@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
-          tar czf "${versioned_archive}" -C package-root monolith-app monolith-app.sha256 .version
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lolabunny-mono@${{ env.VERSION }}-darwin-${{ matrix.arch }}
-          path: |
-            lolabunny-mono@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
-          retention-days: 90
-
-      - name: Upload to release
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.VERSION }}
-          name: ${{ env.VERSION }}
-          files: |
-            lolabunny-mono@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-widget:
-    name: Build Widget (ARM64)
+  build-macos-app:
+    name: Build macOS App
     runs-on: macos-15
     needs: test
     permissions:
@@ -246,6 +154,9 @@ jobs:
           echo "BASE_TAG=${latest_tag}" >> "$GITHUB_ENV"
           echo "VERSION_OFFSET=${offset}" >> "$GITHUB_ENV"
 
+      - name: Write version file
+        run: echo "${{ env.VERSION }}" > .version
+
       - name: Import signing certificate
         if: env.MACOS_CERTIFICATE != '' && env.MACOS_CERTIFICATE_PWD != ''
         env:
@@ -259,42 +170,32 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
           rm certificate.p12
 
-      - name: Warn when signing secrets are missing
-        if: github.ref == 'refs/heads/main'
-        run: |
-          if [ -z "$CODESIGN_IDENTITY" ] || [ -z "$MACOS_CERTIFICATE" ] || [ -z "$MACOS_CERTIFICATE_PWD" ]; then
-            echo "::warning::Signing secrets are missing on main; building an unsigned widget artifact."
-          fi
+      - name: Build app bundle and DMG
+        run: bash scripts/build-release-macos-app.sh
 
-      - name: Write version file
-        run: echo "${{ env.VERSION }}" > .version
-
-      - name: Build widget bundle and DMG
-        run: bash scripts/build-release-widget.sh
-
-      - name: Notarize widget
+      - name: Notarize macOS app
         if: env.APPLE_ID != ''
         run: |
-          ditto -c -k --keepParent .build/lolabunny-release/bundle/Lolabunny.app Lolabunny.zip
+          ditto -c -k --keepParent ".build/lolabunny-macos-app-release/bundle/Lolabunny.app" Lolabunny.zip
           xcrun notarytool submit Lolabunny.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PWD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple .build/lolabunny-release/bundle/Lolabunny.app
+          xcrun stapler staple ".build/lolabunny-macos-app-release/bundle/Lolabunny.app"
           rm Lolabunny.zip
 
       - name: Rebuild DMG after stapling
         if: env.APPLE_ID != ''
         run: |
-          rm -rf .build/lolabunny-release/dmg-staging .build/lolabunny-release/lolabunny-widget@${{ env.VERSION }}-darwin-arm64.dmg
-          mkdir -p .build/lolabunny-release/dmg-staging
-          cp -R .build/lolabunny-release/bundle/Lolabunny.app .build/lolabunny-release/dmg-staging/Lolabunny.app
-          ln -s /Applications .build/lolabunny-release/dmg-staging/Applications
-          hdiutil create -volname Lolabunny -srcfolder .build/lolabunny-release/dmg-staging -ov -format UDZO .build/lolabunny-release/lolabunny-widget@${{ env.VERSION }}-darwin-arm64.dmg
-          rm -rf .build/lolabunny-release/dmg-staging
+          rm -rf .build/lolabunny-macos-app-release/dmg-staging .build/lolabunny-macos-app-release/lolabunny-macos-app@${{ env.VERSION }}.dmg
+          mkdir -p .build/lolabunny-macos-app-release/dmg-staging
+          cp -R ".build/lolabunny-macos-app-release/bundle/Lolabunny.app" ".build/lolabunny-macos-app-release/dmg-staging/Lolabunny.app"
+          ln -s /Applications .build/lolabunny-macos-app-release/dmg-staging/Applications
+          hdiutil create -volname "Lolabunny" -srcfolder .build/lolabunny-macos-app-release/dmg-staging -ov -format UDZO .build/lolabunny-macos-app-release/lolabunny-macos-app@${{ env.VERSION }}.dmg
+          rm -rf .build/lolabunny-macos-app-release/dmg-staging
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lolabunny-widget@${{ env.VERSION }}-darwin-arm64
-          path: .build/lolabunny-release/lolabunny-widget@${{ env.VERSION }}-darwin-arm64.dmg
+          name: lolabunny-macos-app@${{ env.VERSION }}
+          path: .build/lolabunny-macos-app-release/lolabunny-macos-app@${{ env.VERSION }}.dmg
           retention-days: 90
 
       - name: Upload to release
@@ -303,7 +204,7 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
-          files: .build/lolabunny-release/lolabunny-widget@${{ env.VERSION }}-darwin-arm64.dmg
+          files: .build/lolabunny-macos-app-release/lolabunny-macos-app@${{ env.VERSION }}.dmg
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

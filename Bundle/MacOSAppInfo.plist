@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>widget</string>
+    <string>lolabunny-macos-app</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIconName</key>
@@ -28,14 +28,8 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <key>LolabunnyUpdateArchiveBaseURL</key>
-    <string>https://github.com/sidosera/lolabunny.widget/releases</string>
-    <key>LolabunnyUpdateArchiveVersion</key>
-    <string>latest</string>
-    <key>LolabunnyUpdateLocalStreamDelayMs</key>
-    <string>0</string>
     <key>LolabunnyServerPort</key>
-    <string>18085</string>
+    <string>8085</string>
     <key>LolabunnyServerAddress</key>
     <string>127.0.0.1</string>
     <key>LolabunnyServerLogLevel</key>

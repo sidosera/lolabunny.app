@@ -3,36 +3,29 @@ import ServiceManagement
 import SwiftUI
 
 public struct AppView: View {
-    @ObservedObject var widget: AppDelegate
+    @ObservedObject var app: AppDelegate
     @ObservedObject private var interceptor = TextInterceptor.shared
 
-    public init(widget: AppDelegate) {
-        self.widget = widget
+    public init(app: AppDelegate) {
+        self.app = app
     }
 
     public var body: some View {
         Group {
             serverStatusSection
 
-            if let version = widget.availableServerUpdateVersionForMenu {
-                Button(widget.updateMenuVersionText(updateVersion: version)) {
-                    widget.applyDownloadedServerUpdate(version: version)
-                }
-                .disabled(widget.isApplyingServerUpdate)
-            }
-
             Button(Config.Menu.openBindings) {
-                widget.openBindings()
+                app.openBindings()
             }
-            .disabled(!widget.canOpenBindings)
+            .disabled(!app.canOpenBindings)
 
             Button("\(Config.Menu.openSearch)  \(Config.CommandPalette.hotKeyLabel)") {
-                widget.openCommandPalette()
+                app.openCommandPalette()
             }
 
             Toggle(Config.Menu.launchAtLogin, isOn: Binding(
-                get: { widget.enableLaunchAtLogin },
-                set: { widget.setLaunchAtLogin(enabled: $0) }
+                get: { app.enableLaunchAtLogin },
+                set: { app.setLaunchAtLogin(enabled: $0) }
             ))
 
             Divider()
@@ -42,12 +35,12 @@ public struct AppView: View {
             Divider()
 
             Button(Config.Menu.quit) {
-                widget.quit()
+                app.quit()
             }
         }
         .onAppear {
-            widget.startIfNeeded()
-            widget.refreshServerSetupUI()
+            app.startIfNeeded()
+            app.refreshServerSetupUI()
             interceptor.refreshPermissionStatus()
         }
     }
@@ -68,35 +61,18 @@ public struct AppView: View {
 
     @ViewBuilder
     private var serverStatusSection: some View {
-        switch widget.serverSetupState {
+        switch app.serverSetupState {
         case .GettingReady:
             Text("Locating Server...")
-                .foregroundStyle(.secondary)
-
-        case .WaitForDownloadPermission:
-            Button("Download Server") {
-                widget.downloadServerNow()
-            }
-            .disabled(widget.isBootstrappingServer)
-
-        case .DownloadInflight(_, let progress):
-            Text("Downloading \(Int(progress * 100))%")
                 .foregroundStyle(.secondary)
 
         case .Ready(let version):
             Text(version)
                 .foregroundStyle(.secondary)
 
-        case .Failed(let message):
-            if widget.isServerStartFailure(message) {
-                Text("Server Failed")
-                    .foregroundStyle(.secondary)
-            } else {
-                Button("Retry Download") {
-                    widget.downloadServerNow()
-                }
-                .disabled(widget.isBootstrappingServer)
-            }
+        case .Failed:
+            Text("Server Failed")
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -116,15 +92,6 @@ extension AppDelegate {
         return false
     }
 
-    var availableServerUpdateVersionForMenu: String? {
-        guard case .Ready(let version) = serverSetupState else {
-            return nil
-        }
-        return availableServerUpdateVersion(
-            currentVersion: version.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-    }
-
     func setServerSetupState(_ state: ServerSetupState) {
         serverSetupState = state
     }
@@ -134,24 +101,6 @@ extension AppDelegate {
         if enableLaunchAtLogin != enabled {
             enableLaunchAtLogin = enabled
         }
-    }
-
-    func updateMenuVersionText(updateVersion: String) -> String {
-        "Update Now \(compactMenuVersion(updateVersion))"
-    }
-
-    func compactMenuVersion(_ version: String) -> String {
-        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let parsed = parseSemVer(trimmed) else {
-            return trimmed
-        }
-
-        if parsed.patch == 0 {
-            return "v\(parsed.major).\(parsed.minor)"
-        }
-
-        return "v\(parsed.major).\(parsed.minor).\(parsed.patch)"
     }
 
     func makeStatusBarIcon() -> NSImage {
@@ -194,32 +143,8 @@ extension AppDelegate {
         NSWorkspace.shared.open(Config.serverBaseURL)
     }
 
-    func downloadServerNow() {
-        guard !isBootstrappingServer else {
-            return
-        }
-
-        setServerSetupState(.DownloadInflight(phase: "Preparing", progress: 0.01))
-
-        Task { @MainActor [weak self] in
-            await self?.beginBootstrapServerDownload(requiredMajor: nil)
-        }
-    }
-
-    func isServerStartFailure(_ message: String) -> Bool {
-        let normalized = message
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-
-        return normalized == "launch failed"
-            || normalized == "start failed"
-            || normalized.contains("failed to start")
-    }
-
     func quit() {
         serverWatchdogTimer?.invalidate()
-        updateTimer?.invalidate()
-        stopRunningServer()
         NSApp.terminate(nil)
     }
 

@@ -13,26 +13,25 @@ I tried options like native browser bookmarks and tools like Yubnub, but nothing
 
 ## Installation
 
-Lolabunny is a small local widget-server binary that handles searches from your browser. It doesn't dictate where you keep the binary or how you run it.
-For convenience, distribution includes a macOS menu-bar widget.
+Lolabunny ships as a macOS menu-bar app with the local HTTP server embedded in-process. The same server is also available as a standalone `lolabunny-server` executable.
 
-See [releases](https://github.com/sidosera/lolabunny.widget/releases) for installation options.
+See [releases](https://github.com/sidosera/lolabunny.app/releases) for installation options.
 
 ## Development
 
-Run the bundled local runtime from SwiftPM:
+Run the macOS app from SwiftPM:
 
 ```sh
-swift run monolith-app
+swift run lolabunny-macos-app
 ```
 
-It starts the widget-server, fake local release server, and menu-bar widget together. Use custom ports when needed:
+Run the standalone server when you do not want the macOS app:
 
 ```sh
-swift run monolith-app -- --release-port 18091 --widget-server-port 18100
+swift run lolabunny-server -- serve
 ```
 
-Runtime data lives under `.build/monolith-app`; widget logs are written to `~/Library/Logs/Lolabunny.log`.
+App logs are written to `~/Library/Logs/Lolabunny.log`.
 
 ## Extensions
 
@@ -45,14 +44,14 @@ You can create your own command e.g. `~/.lolabunny/my-custom-command.lua` and po
 
 ## For macOS users
 
-I don't have Apple Developer account so I can't distribute the widget. By default apps installed from outside of AppStore go to quarantine. To fix it:
+I don't have Apple Developer account so I can't distribute a notarized app. By default apps installed from outside of AppStore go to quarantine. To fix it:
 
 
 ```sh
 xattr -cr /Applications/Lolabunny.app
 ```
 
-Toggle `Launch at Login` and allow the widget to be added to startup folder and set your browser search engine to: `http://localhost:8085/?cmd=%s` (e.g. guide for [Google Chrome](https://support.google.com/chrome/answer/95426)).
+Toggle `Launch at Login` and allow the app to be added to startup folder and set your browser search engine to: `http://localhost:8085/?cmd=%s` (e.g. guide for [Google Chrome](https://support.google.com/chrome/answer/95426)).
 
 <p align="center">
   <img src="launch-at-login.png" alt="Bunnylol" width="1096" height="358">

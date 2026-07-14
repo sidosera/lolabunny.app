@@ -366,7 +366,7 @@ public func syncHTTPGet(_ url: URL) throws -> Data {
         }
         if let http = response as? HTTPURLResponse,
            !(200..<300).contains(http.statusCode) {
-            result.set(.failure(ServerError.message("widget-server returned \(http.statusCode)")))
+            result.set(.failure(ServerError.message("lolabunny-server returned \(http.statusCode)")))
             return
         }
         result.set(.success(data ?? Data()))

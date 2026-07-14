@@ -8,59 +8,47 @@ let package = Package(
         .macOS(.v13),
     ],
     products: [
-        .executable(name: "widget", targets: ["LolabunnyWidget"]),
-        .library(name: "LolabunnyWidgetCore", targets: ["LolabunnyWidgetCore"]),
-        .executable(name: "monolith-app", targets: ["LolabunnyMonolithApp"]),
-        .library(name: "LolabunnyWidgetServerCore", targets: ["LolabunnyWidgetServerCore"]),
-        .executable(name: "widget-server", targets: ["LolabunnyWidgetServer"]),
+        .executable(name: "lolabunny-macos-app", targets: ["LolabunnyMacOSApp"]),
+        .executable(name: "lolabunny-server", targets: ["LolabunnyServer"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/tsolomko/SWCompression.git", from: "4.8.6"),
         .package(url: "https://github.com/Frizlab/swift-xdg.git", from: "2.0.1"),
     ],
     targets: [
-        .executableTarget(
-            name: "LolabunnyWidget",
-            dependencies: ["LolabunnyWidgetCore"],
-            path: "Sources/LolabunnyWidget"
-        ),
         .target(
-            name: "LolabunnyWidgetCore",
+            name: "LolabunnyMacOSAppCore",
             dependencies: [
-                "SWCompression",
                 .product(name: "XDG", package: "swift-xdg"),
             ],
-            path: "Sources/LolabunnyWidgetCore",
+            path: "Sources/LolabunnyMacOSAppCore",
             resources: [
                 .process("Resources"),
             ]
         ),
         .executableTarget(
-            name: "LolabunnyMonolithApp",
-            dependencies: ["LolabunnyDistributionSupport"],
-            path: "Sources/LolabunnyMonolithApp"
+            name: "LolabunnyMacOSApp",
+            dependencies: [
+                "LolabunnyMacOSAppCore",
+                "LolabunnyServerCore",
+            ],
+            path: "Sources/LolabunnyMacOSApp"
         ),
         .target(
-            name: "LolabunnyDistributionSupport",
-            dependencies: ["LolabunnyWidgetServerCore"],
-            path: "Sources/LolabunnyDistributionSupport"
-        ),
-        .target(
-            name: "LolabunnyWidgetServerCore",
-            path: "Sources/LolabunnyWidgetServerCore"
+            name: "LolabunnyServerCore",
+            path: "Sources/LolabunnyServerCore"
         ),
         .executableTarget(
-            name: "LolabunnyWidgetServer",
-            dependencies: ["LolabunnyWidgetServerCore"],
-            path: "Sources/LolabunnyWidgetServer"
+            name: "LolabunnyServer",
+            dependencies: ["LolabunnyServerCore"],
+            path: "Sources/LolabunnyServer"
         ),
         .testTarget(
-            name: "LolabunnyWidgetCoreTests",
+            name: "LolabunnyMacOSAppCoreTests",
             dependencies: [
-                "LolabunnyWidgetCore",
-                "LolabunnyDistributionSupport",
+                "LolabunnyMacOSAppCore",
+                "LolabunnyServerCore",
             ],
-            path: "Tests/LolabunnyWidgetCoreTests"
+            path: "Tests/LolabunnyMacOSAppCoreTests"
         ),
     ],
     swiftLanguageModes: [.v6]

@@ -101,12 +101,12 @@ final class TextInterceptor: ObservableObject {
                   let argsRange   = Range(match.range(at: 2), in: result),
                   let fullRange   = Range(match.range,        in: result) else { continue }
             let cmd = "\(result[bindingRange]) \(result[argsRange])"
-            log("interceptor: calling widget-server cmd=\(cmd)")
+            log("interceptor: calling lolabunny-server cmd=\(cmd)")
             if let replacement = await callCmd(cmd) {
                 log("interceptor: replacement=\(replacement.prefix(80))")
                 result.replaceSubrange(fullRange, with: replacement)
             } else {
-                log("interceptor: widget-server returned nil for cmd=\(cmd)")
+                log("interceptor: lolabunny-server returned nil for cmd=\(cmd)")
             }
         }
 

@@ -1,31 +1,19 @@
 import ApplicationServices
 import AppKit
-import Combine
 import UserNotifications
 
 @MainActor
 public final class AppDelegate: NSObject, ObservableObject {
     @Published public var serverSetupState: ServerSetupState = .GettingReady
-    @Published public var isApplyingServerUpdate = false
-    @Published public var isBootstrappingServer = false
     @Published public var enableLaunchAtLogin = false
 
     private var hasStarted = false
     let commandPalette = CommandPaletteController()
     private var commandPaletteHotKey: GlobalHotKey?
     var isCheckingUpdates = false
-    var bootstrapPromptPosted = false
-    var pendingBootstrapServerRequiredMajor: String?
-    var updateState = UpdateState()
-    var updateTimer: Timer?
     var serverWatchdogTimer: Timer?
-    var serverProcess: Process?
     var isStartingServer = false
-    var lastServerLaunchAttemptVersion: String?
     public lazy var statusBarIcon: NSImage = makeStatusBarIcon()
-    var managedServerRoot: URL {
-        URL(fileURLWithPath: Config.Server.installRoot, isDirectory: true)
-    }
 
     public override init() {
         super.init()
@@ -38,7 +26,7 @@ public final class AppDelegate: NSObject, ObservableObject {
         hasStarted = true
         let volumePath = Config.Server.volumePath ?? "(default)"
         log(
-            "widget launched, arch=\(architectureLabel()), serverRoot=\(managedServerRoot.path), volumePath=\(volumePath)"
+            "macOS app launched, arch=\(architectureLabel()), server=\(Config.serverBaseURL.absoluteString), volumePath=\(volumePath)"
         )
         refreshServerSetupUI()
         configureNotificationActions()
@@ -50,20 +38,10 @@ public final class AppDelegate: NSObject, ObservableObject {
         }
         Task {
             await startServer()
-            startServerUpdateChecksIfConfigured()
         }
         scheduleServerWatchdog()
         registerCommandPaletteHotKey()
         TextInterceptor.shared.start()
-    }
-
-    private func startServerUpdateChecksIfConfigured() {
-        if isServerUpdateSourceConfigured() {
-            scheduleUpdateChecks()
-            runUpdateCheck(force: false, notify: false)
-        } else {
-            log("widget-server update checks disabled: update source is not configured")
-        }
     }
 
     func openCommandPalette() {
@@ -93,7 +71,7 @@ public final class AppDelegate: NSObject, ObservableObject {
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "Enable Accessibility for \(Config.displayName)"
-            alert.informativeText = "\(Config.CommandPalette.hotKeyLabel) needs Accessibility permission so \(Config.displayName) can catch the shortcut before the front widget handles it."
+            alert.informativeText = "\(Config.CommandPalette.hotKeyLabel) needs Accessibility permission so \(Config.displayName) can catch the shortcut before the front app handles it."
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Open Accessibility Settings")
             alert.addButton(withTitle: "Dismiss")
@@ -111,7 +89,7 @@ public final class AppDelegate: NSObject, ObservableObject {
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "Command Palette Shortcut Unavailable"
-            alert.informativeText = "\(Config.CommandPalette.hotKeyLabel) is already used by macOS or another widget. Open Keyboard Shortcuts to remap the conflicting shortcut, then restart \(Config.displayName)."
+            alert.informativeText = "\(Config.CommandPalette.hotKeyLabel) is already used by macOS or another app. Open Keyboard Shortcuts to remap the conflicting shortcut, then restart \(Config.displayName)."
             alert.alertStyle = .warning
             alert.addButton(withTitle: "Open Keyboard Shortcuts")
             alert.addButton(withTitle: "Dismiss")

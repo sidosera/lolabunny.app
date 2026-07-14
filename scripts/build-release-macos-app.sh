@@ -3,24 +3,23 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Lolabunny"
-APP_EXECUTABLE="widget"
+APP_EXECUTABLE="lolabunny-macos-app"
 MIN_MACOS="13.0"
 APP_PACKAGE_DIR="$ROOT_DIR"
-BUILD_DIR="$ROOT_DIR/.build/lolabunny-release"
-SWIFT_SCRATCH_PATH="$ROOT_DIR/.build/swiftpm/widget-arm64"
+BUILD_DIR="$ROOT_DIR/.build/lolabunny-macos-app-release"
 BUNDLE_DIR="$BUILD_DIR/bundle"
 DMG_STAGING_DIR="$BUILD_DIR/dmg-staging"
 APP_BUNDLE="$BUNDLE_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
-INFO_PLIST="$ROOT_DIR/Bundle/Info.plist"
+INFO_PLIST="$ROOT_DIR/Bundle/MacOSAppInfo.plist"
 ENTITLEMENTS="$ROOT_DIR/Bundle/Lolabunny.entitlements"
 ICON_SOURCE="$ROOT_DIR/bunny.png"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/.version")"
-DMG_PATH="$BUILD_DIR/lolabunny-widget@$VERSION-darwin-arm64.dmg"
-SWIFT_TRIPLE="arm64-apple-macos$MIN_MACOS"
+DMG_PATH="$BUILD_DIR/lolabunny-macos-app@$VERSION.dmg"
+export CLANG_MODULE_CACHE_PATH="${CLANG_MODULE_CACHE_PATH:-$ROOT_DIR/.build/clang-module-cache}"
 
 require_file() {
     local path="$1"
@@ -32,6 +31,76 @@ require_file() {
     fi
 }
 
+triple_for_arch() {
+    local arch="$1"
+
+    case "$arch" in
+        arm64) echo "arm64-apple-macos$MIN_MACOS" ;;
+        x86_64) echo "x86_64-apple-macos$MIN_MACOS" ;;
+        *)
+            echo "unsupported arch: $arch" >&2
+            exit 1
+            ;;
+    esac
+}
+
+scratch_path_for_arch() {
+    local arch="$1"
+
+    echo "$ROOT_DIR/.build/swiftpm/lolabunny-macos-app-$arch"
+}
+
+build_product() {
+    local product="$1"
+    local arch="$2"
+    local scratch_path
+    local swift_triple
+
+    scratch_path="$(scratch_path_for_arch "$arch")"
+    swift_triple="$(triple_for_arch "$arch")"
+
+    swift build \
+        --disable-sandbox \
+        --package-path "$APP_PACKAGE_DIR" \
+        --scratch-path "$scratch_path" \
+        --configuration release \
+        --product "$product" \
+        --triple "$swift_triple"
+}
+
+show_bin_path() {
+    local product="$1"
+    local arch="$2"
+    local scratch_path
+    local swift_triple
+
+    scratch_path="$(scratch_path_for_arch "$arch")"
+    swift_triple="$(triple_for_arch "$arch")"
+
+    swift build \
+        --disable-sandbox \
+        --package-path "$APP_PACKAGE_DIR" \
+        --scratch-path "$scratch_path" \
+        --configuration release \
+        --product "$product" \
+        --triple "$swift_triple" \
+        --show-bin-path
+}
+
+create_universal_binary() {
+    local product="$1"
+    local output="$2"
+    local arm64_bin
+    local x86_64_bin
+
+    arm64_bin="$(show_bin_path "$product" arm64)/$product"
+    x86_64_bin="$(show_bin_path "$product" x86_64)/$product"
+    require_file "$arm64_bin" "$product arm64 binary"
+    require_file "$x86_64_bin" "$product x86_64 binary"
+    lipo -create "$arm64_bin" "$x86_64_bin" -output "$output"
+    chmod 755 "$output"
+}
+
 require_file "$INFO_PLIST" "Info.plist"
 require_file "$ENTITLEMENTS" "Entitlements file"
 require_file "$ICON_SOURCE" "Icon source"
@@ -39,27 +108,11 @@ require_file "$ICON_SOURCE" "Icon source"
 rm -rf "$BUNDLE_DIR" "$DMG_STAGING_DIR" "$DMG_PATH"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
-swift build \
-    --disable-sandbox \
-    --package-path "$APP_PACKAGE_DIR" \
-    --scratch-path "$SWIFT_SCRATCH_PATH" \
-    --configuration release \
-    --product "$APP_EXECUTABLE" \
-    --triple "$SWIFT_TRIPLE"
+for arch in arm64 x86_64; do
+    build_product "$APP_EXECUTABLE" "$arch"
+done
 
-bin_dir="$(swift build \
-    --disable-sandbox \
-    --package-path "$APP_PACKAGE_DIR" \
-    --scratch-path "$SWIFT_SCRATCH_PATH" \
-    --configuration release \
-    --product "$APP_EXECUTABLE" \
-    --triple "$SWIFT_TRIPLE" \
-    --show-bin-path)"
-
-swift_bin="$bin_dir/$APP_EXECUTABLE"
-require_file "$swift_bin" "Swift binary"
-
-install -m 755 "$swift_bin" "$MACOS_DIR/$APP_EXECUTABLE"
+create_universal_binary "$APP_EXECUTABLE" "$MACOS_DIR/$APP_EXECUTABLE"
 strip "$MACOS_DIR/$APP_EXECUTABLE"
 cp "$INFO_PLIST" "$CONTENTS_DIR/Info.plist"
 printf 'APPL????' > "$CONTENTS_DIR/PkgInfo"

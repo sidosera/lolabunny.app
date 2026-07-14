@@ -1,6 +1,6 @@
 import Darwin
 import Foundation
-import LolabunnyWidgetServerCore
+import LolabunnyServerCore
 
 nonisolated(unsafe) private var activePidFilePath: String?
 
@@ -58,7 +58,7 @@ func run(arguments: [String]) throws -> Int32 {
     case "bindings", "list":
         printCommands(CommandRouter().allCommands())
     case "completion":
-        print("# Shell completion generation is not required for the Swift widget-server.")
+        print("# Shell completion generation is not required for the Swift lolabunny-server.")
     case "pid-file":
         print(Paths.pidFile.path)
     default:
