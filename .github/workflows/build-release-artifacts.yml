@@ -117,6 +117,95 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build-monolith-app:
+    name: Build Monolith App (${{ matrix.arch }})
+    runs-on: macos-15
+    needs: test
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - arch: arm64
+            swift_triple: arm64-apple-macos13.0
+          - arch: x86_64
+            swift_triple: x86_64-apple-macos13.0
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version from nearest tag and commit offset
+        run: |
+          exact_tag="$(git describe --tags --match "v*" --exact-match 2>/dev/null || true)"
+          if [[ -n "$exact_tag" && "$exact_tag" != *+* ]]; then
+            latest_tag="$exact_tag"
+            offset="0"
+            version="$exact_tag"
+          else
+            latest_tag="$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || true)"
+            latest_tag="${latest_tag%%+*}"
+            if [ -z "$latest_tag" ]; then
+              latest_tag="v0.0.0"
+              offset="$(git rev-list --count HEAD)"
+            else
+              offset="$(git rev-list --count "${latest_tag}..HEAD")"
+            fi
+            version="${latest_tag}+${offset}"
+          fi
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          echo "BASE_TAG=${latest_tag}" >> "$GITHUB_ENV"
+          echo "VERSION_OFFSET=${offset}" >> "$GITHUB_ENV"
+
+      - name: Write version file
+        run: echo "${{ env.VERSION }}" > .version
+
+      - name: Build monolith-app binary
+        run: |
+          swift build \
+            --scratch-path .build/swiftpm/monolith-app-${{ matrix.arch }} \
+            --configuration release \
+            --product monolith-app \
+            --triple ${{ matrix.swift_triple }}
+
+      - name: Package binary
+        run: |
+          rm -rf package-root
+          mkdir -p package-root
+          bin_dir="$(swift build \
+            --scratch-path .build/swiftpm/monolith-app-${{ matrix.arch }} \
+            --configuration release \
+            --product monolith-app \
+            --triple ${{ matrix.swift_triple }} \
+            --show-bin-path)"
+          cp "$bin_dir/monolith-app" package-root/monolith-app
+          (cd package-root && shasum -a 256 monolith-app > monolith-app.sha256)
+          cp .version package-root/.version
+          versioned_archive="monolith-app-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
+          tar czf "${versioned_archive}" -C package-root monolith-app monolith-app.sha256 .version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: monolith-app-${{ env.VERSION }}-${{ matrix.arch }}
+          path: |
+            monolith-app-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+          retention-days: 90
+
+      - name: Upload to release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+          files: |
+            monolith-app-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-widget:
     name: Build Widget (ARM64)
     runs-on: macos-15
