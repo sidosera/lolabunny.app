@@ -19,7 +19,7 @@ extension AppDelegate {
         let trimmedVersion = version.trimmingCharacters(in: .whitespacesAndNewlines)
         let detectedArch = architectureAliases().first ?? architectureLabel().lowercased()
         let arch = detectedArch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return "\(Config.serverExecutableName)-\(trimmedVersion)-darwin-\(arch).tar.gz"
+        return "lolabunny-server@\(trimmedVersion)-darwin-\(arch).tar.gz"
     }
 
     func latestCompatibleUpdateVersion(currentVersion: String, latestVersions: [String]) -> String? {

@@ -91,7 +91,7 @@ private final class BundledRunner {
         let archiveURL = releasesURL
             .appendingPathComponent("download")
             .appendingPathComponent(version)
-            .appendingPathComponent("widget-server-\(version)-darwin-\(Self.architectureLabel()).tar.gz")
+            .appendingPathComponent("lolabunny-server@\(version)-darwin-\(Self.architectureLabel()).tar.gz")
 
         try startLocalReleaseServer(serverBinary: serverBinary, releasesURL: releasesURL)
         try await waitForLocalReleaseServer(releasesURL: releasesURL)

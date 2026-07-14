@@ -69,7 +69,7 @@ private struct ReleaseArtifact {
     static func package(binary: URL, version: String, workDir: URL) throws -> ReleaseArtifact {
         let fm = FileManager.default
         let architecture = architectureLabel()
-        let archiveName = "\(ReleaseDefaults.serverExecutableName)-\(version)-darwin-\(architecture).tar.gz"
+        let archiveName = "lolabunny-server@\(version)-darwin-\(architecture).tar.gz"
         let packageDir = workDir.appendingPathComponent("release-package-\(safePathComponent(version))", isDirectory: true)
         let archiveDir = workDir.appendingPathComponent("archives", isDirectory: true)
         let archiveURL = archiveDir.appendingPathComponent(archiveName)

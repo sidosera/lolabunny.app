@@ -333,7 +333,7 @@ private final class E2ESandbox {
         corruptChecksum: Bool = false
     ) throws {
         let fm = FileManager.default
-        let archiveName = "\(Config.serverExecutableName)-\(version)-darwin-\(Self.architectureLabel()).tar.gz"
+        let archiveName = "lolabunny-server@\(version)-darwin-\(Self.architectureLabel()).tar.gz"
         let downloadDir = releasesDir
             .appendingPathComponent("download", isDirectory: true)
             .appendingPathComponent(version, isDirectory: true)

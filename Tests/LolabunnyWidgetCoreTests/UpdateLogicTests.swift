@@ -8,7 +8,7 @@ final class UpdateLogicTests: XCTestCase {
         let widget = AppDelegate()
         let archiveName = widget.canonicalServerArchiveName(version: "v2.4.6")
         XCTAssertTrue(archiveName.contains("v2.4.6"))
-        XCTAssertTrue(archiveName.hasPrefix("\(Config.serverExecutableName)-"))
+        XCTAssertTrue(archiveName.hasPrefix("lolabunny-server@"))
         XCTAssertTrue(archiveName.hasSuffix(".tar.gz"))
     }
 
@@ -48,7 +48,7 @@ final class UpdateLogicTests: XCTestCase {
 
     func testReleaseArchiveURLUsesDownloadTagPathForLocalAndRemote() {
         let widget = AppDelegate()
-        let archiveName = "widget-server-v3.2.1-darwin-arm64.tar.gz"
+        let archiveName = "lolabunny-server@v3.2.1-darwin-arm64.tar.gz"
         let remoteBase = URL(string: "https://example.com/releases")!
         let localBase = URL(fileURLWithPath: "/tmp/release-fixtures/releases", isDirectory: true)
 
@@ -170,7 +170,7 @@ final class UpdateLogicTests: XCTestCase {
     }
 
     func testParseExpectedSHA256ExtractsArchiveHash() {
-        let archive = "widget-server-v1.2.3-darwin-universal.tar.gz"
+        let archive = "lolabunny-server@v1.2.3-darwin-universal.tar.gz"
         let hash = String(repeating: "a", count: 64)
         let contents = "\(hash) *\(archive)\n"
 

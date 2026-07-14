@@ -94,15 +94,15 @@ jobs:
             cp -R lola-core package-root/
             files+=(lola-core)
           fi
-          versioned_archive="widget-server-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
+          versioned_archive="lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
           tar czf "${versioned_archive}" -C package-root "${files[@]}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: widget-server-${{ env.VERSION }}-${{ matrix.arch }}
+          name: lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}
           path: |
-            widget-server-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+            lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
           retention-days: 90
 
       - name: Upload to release
@@ -112,7 +112,7 @@ jobs:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
           files: |
-            widget-server-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+            lolabunny-server@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -183,15 +183,15 @@ jobs:
           cp "$bin_dir/monolith-app" package-root/monolith-app
           (cd package-root && shasum -a 256 monolith-app > monolith-app.sha256)
           cp .version package-root/.version
-          versioned_archive="monolith-app-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
+          versioned_archive="lolabunny-mono@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz"
           tar czf "${versioned_archive}" -C package-root monolith-app monolith-app.sha256 .version
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: monolith-app-${{ env.VERSION }}-${{ matrix.arch }}
+          name: lolabunny-mono@${{ env.VERSION }}-darwin-${{ matrix.arch }}
           path: |
-            monolith-app-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+            lolabunny-mono@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
           retention-days: 90
 
       - name: Upload to release
@@ -201,7 +201,7 @@ jobs:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
           files: |
-            monolith-app-${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
+            lolabunny-mono@${{ env.VERSION }}-darwin-${{ matrix.arch }}.tar.gz
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -283,18 +283,18 @@ jobs:
       - name: Rebuild DMG after stapling
         if: env.APPLE_ID != ''
         run: |
-          rm -rf .build/lolabunny-release/dmg-staging .build/lolabunny-release/Lolabunny-${{ env.VERSION }}-arm64.dmg
+          rm -rf .build/lolabunny-release/dmg-staging .build/lolabunny-release/lolabunny-widget@${{ env.VERSION }}-darwin-arm64.dmg
           mkdir -p .build/lolabunny-release/dmg-staging
           cp -R .build/lolabunny-release/bundle/Lolabunny.app .build/lolabunny-release/dmg-staging/Lolabunny.app
           ln -s /Applications .build/lolabunny-release/dmg-staging/Applications
-          hdiutil create -volname Lolabunny -srcfolder .build/lolabunny-release/dmg-staging -ov -format UDZO .build/lolabunny-release/Lolabunny-${{ env.VERSION }}-arm64.dmg
+          hdiutil create -volname Lolabunny -srcfolder .build/lolabunny-release/dmg-staging -ov -format UDZO .build/lolabunny-release/lolabunny-widget@${{ env.VERSION }}-darwin-arm64.dmg
           rm -rf .build/lolabunny-release/dmg-staging
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lolabunny-widget-${{ env.VERSION }}
-          path: .build/lolabunny-release/Lolabunny-${{ env.VERSION }}-arm64.dmg
+          name: lolabunny-widget@${{ env.VERSION }}-darwin-arm64
+          path: .build/lolabunny-release/lolabunny-widget@${{ env.VERSION }}-darwin-arm64.dmg
           retention-days: 90
 
       - name: Upload to release
@@ -303,7 +303,7 @@ jobs:
         with:
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
-          files: .build/lolabunny-release/Lolabunny-${{ env.VERSION }}-arm64.dmg
+          files: .build/lolabunny-release/lolabunny-widget@${{ env.VERSION }}-darwin-arm64.dmg
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

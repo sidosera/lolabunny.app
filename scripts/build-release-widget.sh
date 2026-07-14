@@ -19,7 +19,7 @@ ENTITLEMENTS="$ROOT_DIR/Bundle/Lolabunny.entitlements"
 ICON_SOURCE="$ROOT_DIR/bunny.png"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/.version")"
-DMG_PATH="$BUILD_DIR/$APP_NAME-$VERSION-arm64.dmg"
+DMG_PATH="$BUILD_DIR/lolabunny-widget@$VERSION-darwin-arm64.dmg"
 SWIFT_TRIPLE="arm64-apple-macos$MIN_MACOS"
 
 require_file() {
