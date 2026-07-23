@@ -81,7 +81,10 @@ extension AppDelegate {
 
     func makeStatusBarIcon() -> NSImage {
         let icon = NSImage(size: Config.Icon.size)
-        let bundles = [Bundle.module, Bundle.main]
+        let bundles = [
+            ModuleResources.bundle(named: "Lolabunny_LolabunnyMacOSAppCore"),
+            Bundle.main,
+        ]
 
         for name in Config.Icon.variants {
             for bundle in bundles {
