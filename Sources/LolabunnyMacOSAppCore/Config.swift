@@ -15,7 +15,7 @@ enum Config {
         }
         return Development.serverPort
         #else
-        return Config.plistValue("LolabunnyServerPort") ?? 8_085
+        return Config.plistValue("LolabunnyServerPort") ?? 18_085
         #endif
     }
     /// Same host as `serve --address` (see `LolabunnyServerAddress`). Avoid `localhost` so health checks do not hit IPv6 while the lolabunny-server listens on IPv4.
@@ -209,7 +209,7 @@ enum Config {
         }()
         static let dataDir = sessionRoot.appendingPathComponent("data", isDirectory: true)
         static let volumeDir = sessionRoot.appendingPathComponent("volume", isDirectory: true)
-        static let serverPort: UInt16 = availablePort() ?? 8_085
+        static let serverPort: UInt16 = availablePort() ?? 18_085
 
         private static func availablePort() -> UInt16? {
             let fd = socket(AF_INET, SOCK_STREAM, 0)
@@ -249,15 +249,9 @@ enum Config {
     #endif
 
     enum Menu {
-        static let openSearch = "Search"
         static let openBindings = "Open Bindings"
         static let launchAtLogin = "Launch at Login"
         static let quit = "Quit"
-    }
-
-    enum CommandPalette {
-        static let hotKeyLabel = "⌘P"
-        static let placeholder = "Search"
     }
 
     enum Notification {

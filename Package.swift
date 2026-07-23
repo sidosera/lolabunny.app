@@ -12,6 +12,7 @@ let package = Package(
         .executable(name: "lolabunny-server", targets: ["LolabunnyServer"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/ChrisGVE/LuaSwift.git", from: "1.12.4"),
         .package(url: "https://github.com/Frizlab/swift-xdg.git", from: "2.0.1"),
     ],
     targets: [
@@ -35,7 +36,13 @@ let package = Package(
         ),
         .target(
             name: "LolabunnyServerCore",
-            path: "Sources/LolabunnyServerCore"
+            dependencies: [
+                .product(name: "LuaSwift", package: "LuaSwift"),
+            ],
+            path: "Sources/LolabunnyServerCore",
+            resources: [
+                .process("Resources"),
+            ]
         ),
         .executableTarget(
             name: "LolabunnyServer",

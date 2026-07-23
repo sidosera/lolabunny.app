@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lolabunny</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,__LOGO__">
+<style>
+:root {
+  --label-primary: rgba(0,0,0,0.85);
+  --label-secondary: rgba(0,0,0,0.5);
+  --label-tertiary: rgba(0,0,0,0.25);
+  --fill-quaternary: rgba(0,0,0,0.03);
+  --separator: rgba(60,60,67,0.29);
+  --bg: #f5f5f7;
+  --surface: #fff;
+  --accent: rgba(0,135,255,1);
+  --shadow: 0 1px 4px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --label-primary: rgba(255,255,255,1);
+    --label-secondary: rgba(255,255,255,0.55);
+    --label-tertiary: rgba(255,255,255,0.25);
+    --fill-quaternary: rgba(255,255,255,0.03);
+    --separator: rgba(255,255,255,0.15);
+    --bg: #000;
+    --surface: #1c1c1e;
+    --accent: rgba(10,153,255,1);
+    --shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font-sans);
+  color: var(--label-primary);
+  background: var(--bg);
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 680px;
+  height: 100vh;
+  margin: 0 auto;
+  padding: 48px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.card {
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+header { text-align: center; margin-bottom: 36px; }
+header img { width: 56px; height: 56px; border-radius: 14px; }
+header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin-top: 14px;
+}
+header p {
+  color: var(--label-secondary);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.search { position: relative; margin-bottom: 24px; }
+.search input {
+  width: 100%;
+  height: 28px;
+  padding: 0 28px 0 32px;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 100px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(25,25,25,1);
+  caret-color: rgba(0,135,255,1);
+  outline: none;
+  font-family: inherit;
+  transition: border-color .2s, box-shadow .2s;
+}
+.search input:focus {
+  border-color: rgba(0,122,255,0.15);
+  box-shadow: 0 0 0 3.5px rgba(0,122,255,0.25);
+}
+.search input::placeholder { color: rgba(114,114,114,1); }
+@media (prefers-color-scheme: dark) {
+  .search input {
+    background: rgba(255,255,255,0.1);
+    border-color: transparent;
+    color: var(--label-primary);
+  }
+  .search input:focus {
+    background: rgba(217,217,217,1);
+    border-color: rgba(0,135,255,0.15);
+    box-shadow: 0 0 0 3.5px rgba(0,135,255,0.25);
+    color: rgba(25,25,25,1);
+    caret-color: rgba(0,135,255,1);
+  }
+  .search input::placeholder { color: rgba(114,114,114,1); }
+}
+.search-icon {
+  position: absolute;
+  left: 8px;
+  top: 0;
+  width: 21px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.search-icon svg { color: rgba(114,114,114,1); }
+.search-clear {
+  position: absolute;
+  right: 6px;
+  top: 0;
+  width: 16px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s;
+}
+.search-clear.visible { opacity: 1; pointer-events: auto; }
+.search-clear svg { color: rgba(114,114,114,1); }
+.search-clear:hover svg { color: rgba(25,25,25,1); }
+@media (prefers-color-scheme: dark) {
+  .search-clear svg { color: rgba(152,152,157,1); }
+  .search-clear:hover svg { color: rgba(244,244,244,1); }
+}
+ul { list-style: none; }
+#list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+li {
+  border-bottom: 1px solid var(--separator);
+  transition: background .15s;
+}
+li:last-child { border-bottom: none; }
+li:hover { background: var(--fill-quaternary); }
+li.hidden { display: none; }
+.row { display: flex; align-items: baseline; padding: 11px 16px; gap: 14px; }
+.cmd {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 64px;
+  flex-shrink: 0;
+}
+.desc {
+  font-size: 14px;
+  color: var(--label-secondary);
+  line-height: 1.4;
+}
+.alias {
+  color: var(--label-tertiary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  margin-left: 6px;
+}
+.example {
+  display: block;
+  color: var(--label-tertiary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+.empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--label-tertiary);
+  font-size: 14px;
+  display: none;
+  flex-shrink: 0;
+}
+.result {
+  margin-top: 12px;
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  display: none;
+  gap: 10px;
+  align-items: center;
+}
+.result.visible { display: flex; }
+.result-body {
+  min-width: 0;
+  flex: 1;
+}
+.result-label {
+  color: var(--label-tertiary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  margin-bottom: 3px;
+}
+.result-value {
+  color: var(--label-primary);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.result a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+footer {
+  text-align: center;
+  padding: 24px 0 0;
+  color: var(--label-tertiary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<img src="data:image/png;base64,__LOGO__" alt="lolabunny">
+<h1>lolabunny</h1>
+<p>__COMMAND_COUNT__ commands</p>
+</header>
+<div class="search">
+<div class="search-icon">
+<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="5" cy="5" r="4.25" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+</div>
+<input type="text" id="q" placeholder="Search" autocomplete="off" autofocus>
+<div class="search-clear" id="clear">
+<svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="7" fill="currentColor" opacity="0.25"/><path d="M5.25 5.25L9.75 9.75M9.75 5.25L5.25 9.75" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+</div>
+</div>
+<div class="card">
+<ul id="list">
+__COMMAND_ROWS__
+</ul>
+<div class="empty" id="empty">No matching commands</div>
+</div>
+<div class="result" id="result">
+<div class="result-body">
+<div class="result-label" id="resultLabel">Result</div>
+<div class="result-value" id="resultValue"></div>
+</div>
+<a id="resultOpen" href="#" target="_blank" rel="noreferrer">Open</a>
+</div>
+<footer>__VERSION__</footer>
+</div>
+<script>
+const commands=__COMMANDS_JSON__;
+const q=document.getElementById('q'),list=document.getElementById('list'),empty=document.getElementById('empty'),clr=document.getElementById('clear');
+const result=document.getElementById('result'),resultLabel=document.getElementById('resultLabel'),resultValue=document.getElementById('resultValue'),resultOpen=document.getElementById('resultOpen');
+const originalRows=list.innerHTML;
+let mode='search',activeCommand=null,suggestionsToken=0;
+
+function escapeHTML(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function commandSearch(c){return [...c.bindings,c.description,c.example,c.origin].join(' ').toLowerCase()}
+function commandQuery(){return q.value.startsWith('/')?q.value.slice(1):q.value}
+function setResult(data){
+  if(!data){result.classList.remove('visible');return}
+  result.classList.add('visible');
+  resultLabel.textContent=data.query||'Result';
+  resultValue.textContent=data.location||'';
+  resultOpen.href=data.location||'#';
+  resultOpen.style.display=data.kind==='url'?'inline-flex':'none';
+}
+function rowsForCommands(items){
+  return items.map(c=>`<li data-fill="/${escapeHTML(c.bindings[0])} "><div class="row"><span class="cmd">${escapeHTML(c.bindings[0])}</span><span class="desc">${escapeHTML(c.description)}${c.bindings.length>1?`<span class="alias">${escapeHTML(c.bindings.slice(1).join(', '))}</span>`:''}<span class="example">${escapeHTML(c.example)}</span></span></div></li>`).join('')
+}
+function rowsForArgs(command,items){
+  const primary=command?.bindings?.[0]||'';
+  return items.map(item=>{
+    const text=String(item??'').trim();
+    const startsWithBinding=command?.bindings?.some(b=>text.toLowerCase()===b.toLowerCase()||text.toLowerCase().startsWith(b.toLowerCase()+' '));
+    const fill=startsWithBinding?`/${text}`:`/${primary} ${text}`;
+    return `<li data-fill="${escapeHTML(fill)}"><div class="row"><span class="cmd">${escapeHTML(primary)}</span><span class="desc">${escapeHTML(text)}</span></div></li>`
+  }).join('')
+}
+function enterSearchMode(){
+  mode='search';activeCommand=null;q.placeholder='Search';setResult(null);renderSearch();
+}
+function enterCommandMode(){
+  mode='command';q.placeholder='/ command';renderCommand();
+}
+function renderSearch(){
+  if(list.innerHTML!==originalRows)list.innerHTML=originalRows;
+  const v=q.value.toLowerCase();let n=0;
+  list.querySelectorAll('li').forEach(li=>{const m=li.dataset.cmd.includes(v);li.classList.toggle('hidden',!m);if(m)n++});
+  empty.textContent='No matching commands';empty.style.display=n?'none':'block';clr.classList.toggle('visible',q.value.length>0);
+}
+async function renderCommand(){
+  const raw=commandQuery(),parts=raw.trimStart().split(/\s+/),name=parts[0]?.toLowerCase()||'',arg=raw.slice(name.length).trimStart();
+  activeCommand=commands.find(c=>c.bindings.some(b=>b.toLowerCase()===name))||null;
+  clr.classList.toggle('visible',q.value.length>0);
+  if(!name){
+    list.innerHTML=rowsForCommands(commands);
+    empty.style.display=commands.length?'none':'block';
+    return;
+  }
+  if(!activeCommand){
+    const matches=commands.filter(c=>commandSearch(c).includes(name));
+    list.innerHTML=rowsForCommands(matches);
+    empty.textContent='No matching commands';empty.style.display=matches.length?'none':'block';
+    return;
+  }
+  const fallback=[activeCommand.example].filter(Boolean);
+  list.innerHTML=rowsForArgs(activeCommand,fallback);
+  empty.style.display=fallback.length?'none':'block';
+  if(activeCommand.suggestURL&&arg.length>0){
+    const token=++suggestionsToken;
+    try{
+      const res=await fetch(`/api/suggest?cmd=${encodeURIComponent(activeCommand.bindings[0])}&q=${encodeURIComponent(arg)}`);
+      const suggestions=await res.json();
+      if(token===suggestionsToken&&suggestions.length){
+        list.innerHTML=rowsForArgs(activeCommand,suggestions);
+        empty.style.display='none';
+      }
+    }catch{}
+  }
+}
+async function executeCommand(){
+  const cmd=commandQuery().trim();
+  if(!cmd)return;
+  const res=await fetch(`/api/resolve?cmd=${encodeURIComponent(cmd)}`);
+  setResult(await res.json());
+}
+function handleInput(){
+  if(q.value.startsWith('/')){if(mode!=='command')enterCommandMode();else renderCommand()}
+  else{if(mode!=='search')enterSearchMode();else renderSearch()}
+}
+q.addEventListener('input',handleInput);
+q.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&mode==='command'){e.preventDefault();executeCommand()}
+  if(e.key==='Escape'&&mode==='command'){q.value='';enterSearchMode()}
+});
+list.addEventListener('click',e=>{
+  const li=e.target.closest('li[data-fill]');
+  if(!li)return;
+  q.value=li.dataset.fill;
+  q.focus();
+  handleInput();
+});
+clr.addEventListener('click',()=>{q.value='';q.focus();enterSearchMode()});
+</script>
+</body>
+</html>

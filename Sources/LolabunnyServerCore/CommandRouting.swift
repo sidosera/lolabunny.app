@@ -1,4 +1,5 @@
 import Foundation
+import LuaSwift
 
 public struct EmbeddedCommandExecutor {
     public init() {}
@@ -46,7 +47,7 @@ public struct ServerConfig {
     public var volumePath: String?
 
     public init(
-        port: UInt16 = 8_085,
+        port: UInt16 = 18_085,
         address: String = "127.0.0.1",
         logLevel: String = "normal",
         volumePath: String? = nil
@@ -105,31 +106,40 @@ public struct CommandInfo {
     public let description: String
     public let example: String
     public let origin: String
+    public let suggestURL: String?
 }
 
 final class CommandRegistry {
-    private let commands: [CommandInfo]
+    private let commands: [LuaCommand]
 
     init() {
         commands = Self.discoverLuaCommandInfo().sorted {
-            ($0.bindings.first ?? "").localizedCaseInsensitiveCompare($1.bindings.first ?? "")
+            ($0.info.bindings.first ?? "").localizedCaseInsensitiveCompare($1.info.bindings.first ?? "")
                 == .orderedAscending
         }
     }
 
     func allCommands() -> [CommandInfo] {
-        commands
+        commands.map(\.info)
     }
 
     func commandInfo(for binding: String) -> CommandInfo? {
+        command(for: binding)?.info
+    }
+
+    func command(for binding: String) -> LuaCommand? {
         commands.first { command in
-            command.bindings.contains { $0.caseInsensitiveCompare(binding) == .orderedSame }
+            command.info.bindings.contains { $0.caseInsensitiveCompare(binding) == .orderedSame }
         }
     }
 
-    private static func discoverLuaCommandInfo() -> [CommandInfo] {
+    func commandThatShouldHandle(_ query: String) -> LuaCommand? {
+        commands.first { $0.shouldHandle(query) }
+    }
+
+    private static func discoverLuaCommandInfo() -> [LuaCommand] {
         let fm = FileManager.default
-        var results: [CommandInfo] = []
+        var results: [LuaCommand] = []
         for directory in Paths.pluginDirectories() {
             guard let enumerator = fm.enumerator(
                 at: directory,
@@ -148,7 +158,7 @@ final class CommandRegistry {
         return results
     }
 
-    private static func parseLuaCommandInfo(at url: URL, root: URL) -> CommandInfo? {
+    private static func parseLuaCommandInfo(at url: URL, root: URL) -> LuaCommand? {
         guard let source = try? String(contentsOf: url, encoding: .utf8),
               let bindings = parseBindings(from: source),
               !bindings.isEmpty else {
@@ -159,18 +169,20 @@ final class CommandRegistry {
         let path = url.path
         if path.contains("/lola-core/") {
             origin = "lola-core"
-        } else if root.lastPathComponent == "commands" {
+        } else if root.lastPathComponent == "commands" || root.lastPathComponent == ".lolabunny" {
             origin = "user"
         } else {
             origin = url.deletingLastPathComponent().lastPathComponent
         }
 
-        return CommandInfo(
+        let info = CommandInfo(
             bindings: bindings,
             description: parseStringField("description", from: source) ?? "",
             example: parseStringField("example", from: source) ?? "",
-            origin: origin
+            origin: origin,
+            suggestURL: parseStringField("suggest_url", from: source)
         )
+        return LuaCommand(info: info, sourceURL: url)
     }
 
     private static func parseBindings(from source: String) -> [String]? {
@@ -213,6 +225,126 @@ final class CommandRegistry {
     }
 }
 
+struct LuaCommand {
+    let info: CommandInfo
+    let sourceURL: URL
+
+    func execute(_ query: String) -> String? {
+        runLua(function: "process", query: query)?.nilIfEmpty
+    }
+
+    func shouldHandle(_ query: String) -> Bool {
+        guard hasFunction("should_handle"),
+              let value = runLua(function: "should_handle", query: query) else {
+            let normalized = query.lowercased()
+            return info.bindings.contains { binding in
+                let lower = binding.lowercased()
+                return normalized == lower || normalized.hasPrefix(lower + " ")
+            }
+        }
+        return value == "true" || value == "1"
+    }
+
+    private func hasFunction(_ name: String) -> Bool {
+        guard let source = try? String(contentsOf: sourceURL, encoding: .utf8) else {
+            return false
+        }
+        return source.contains("function \(name)")
+    }
+
+    private func runLua(function: String, query: String) -> String? {
+        guard let source = try? String(contentsOf: sourceURL, encoding: .utf8) else {
+            return nil
+        }
+
+        do {
+            return try EmbeddedLuaCommandRuntime(source: source, chunkName: sourceURL.path)
+                .call(function: function, query: query)
+        } catch {
+            fputs("Warning: Failed to run command \(sourceURL.path): \(error.localizedDescription)\n", stderr)
+            return nil
+        }
+    }
+}
+
+private final class EmbeddedLuaCommandRuntime {
+    private let engine: LuaEngine
+
+    init(source: String, chunkName: String) throws {
+        let configuration = LuaEngineConfiguration(
+            sandboxed: true,
+            vmMemoryLimit: 8 * 1_024 * 1_024
+        )
+        engine = try LuaEngine(configuration: configuration)
+        engine.setInstructionLimit(250_000)
+        registerHelpers()
+        try engine.run(source, chunkName: chunkName)
+    }
+
+    func call(function: String, query: String) throws -> String? {
+        let result = try engine.evaluate("""
+        local fn = _G[\(luaStringLiteral(function))]
+        if type(fn) ~= "function" then return nil end
+        return fn(\(luaStringLiteral(query)))
+        """)
+        switch result {
+        case .nil:
+            return nil
+        case .string(let value):
+            return value.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .number(let value):
+            return value == floor(value) ? String(Int(value)) : String(value)
+        case .bool(let value):
+            return value ? "true" : "false"
+        default:
+            return nil
+        }
+    }
+
+    private func registerHelpers() {
+        engine.registerFunction(name: "url_encode") { values in
+            .string(percentEncode(luaStringArgument(values)))
+        }
+        engine.registerFunction(name: "url_encode_path") { values in
+            .string(percentEncode(luaStringArgument(values), allowingSlash: true))
+        }
+        engine.registerFunction(name: "get_args") { values in
+            let fullArgs = luaStringArgument(values, at: 0)
+            let binding = luaStringArgument(values, at: 1)
+            if fullArgs.hasPrefix(binding) {
+                return .string(String(fullArgs.dropFirst(binding.count)).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            return .string(fullArgs.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        engine.registerFunction(name: "trim") { values in
+            .string(luaStringArgument(values).trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        engine.registerFunction(name: "starts_with") { values in
+            .bool(luaStringArgument(values, at: 0).hasPrefix(luaStringArgument(values, at: 1)))
+        }
+        engine.registerFunction(name: "ends_with") { values in
+            .bool(luaStringArgument(values, at: 0).hasSuffix(luaStringArgument(values, at: 1)))
+        }
+        engine.registerFunction(name: "contains") { values in
+            .bool(luaStringArgument(values, at: 0).contains(luaStringArgument(values, at: 1)))
+        }
+        engine.registerFunction(name: "upper") { values in
+            .string(luaStringArgument(values).uppercased())
+        }
+        engine.registerFunction(name: "lower") { values in
+            .string(luaStringArgument(values).lowercased())
+        }
+        engine.registerFunction(name: "split") { values in
+            let value = luaStringArgument(values, at: 0)
+            let separator = luaStringArgument(values, at: 1)
+            guard !separator.isEmpty else {
+                return .array([.string(value)])
+            }
+            return .array(value.components(separatedBy: separator).map(LuaValue.string))
+        }
+    }
+}
+
 public final class CommandRouter {
     private let registry: CommandRegistry
 
@@ -238,8 +370,13 @@ public final class CommandRouter {
         case "giff", "m":
             return giphyMarkdownURL(for: arguments(after: binding, in: resolvedQuery))
         default:
-            if registry.commandInfo(for: binding) != nil {
-                return config.searchURL(for: resolvedQuery)
+            if let command = registry.command(for: binding),
+               let url = command.execute(resolvedQuery) {
+                return url
+            }
+            if let command = registry.commandThatShouldHandle(resolvedQuery),
+               let url = command.execute(resolvedQuery) {
+                return url
             }
             return config.searchURL(for: resolvedQuery)
         }
@@ -336,18 +473,66 @@ func dataTextURL(text: String) -> String {
     "data:text/plain;charset=utf-8,\(percentEncode(text))"
 }
 
-func percentEncode(_ value: String) -> String {
+func percentEncode(_ value: String, allowingSlash: Bool = false) -> String {
     var result = ""
     for byte in value.utf8 {
         switch byte {
         case UInt8(ascii: "0")...UInt8(ascii: "9"),
              UInt8(ascii: "A")...UInt8(ascii: "Z"),
-             UInt8(ascii: "a")...UInt8(ascii: "z"):
+             UInt8(ascii: "a")...UInt8(ascii: "z"),
+             UInt8(ascii: "-"),
+             UInt8(ascii: "."),
+             UInt8(ascii: "_"),
+             UInt8(ascii: "~"):
+            result.append(Character(UnicodeScalar(byte)))
+        case UInt8(ascii: "/") where allowingSlash:
             result.append(Character(UnicodeScalar(byte)))
         default:
             result += String(format: "%%%02X", byte)
         }
     }
+    return result
+}
+
+private func luaStringArgument(_ values: [LuaValue], at index: Int = 0) -> String {
+    guard values.indices.contains(index) else {
+        return ""
+    }
+    switch values[index] {
+    case .nil:
+        return ""
+    case .string(let value):
+        return value
+    case .number(let value):
+        return value == floor(value) ? String(Int(value)) : String(value)
+    case .bool(let value):
+        return value ? "true" : "false"
+    default:
+        return ""
+    }
+}
+
+private func luaStringLiteral(_ value: String) -> String {
+    var result = "\""
+    for byte in value.utf8 {
+        switch byte {
+        case UInt8(ascii: "\\"):
+            result += "\\\\"
+        case UInt8(ascii: "\""):
+            result += "\\\""
+        case UInt8(ascii: "\n"):
+            result += "\\n"
+        case UInt8(ascii: "\r"):
+            result += "\\r"
+        case UInt8(ascii: "\t"):
+            result += "\\t"
+        case 32...126:
+            result.append(Character(UnicodeScalar(byte)))
+        default:
+            result += String(format: "\\%03d", byte)
+        }
+    }
+    result += "\""
     return result
 }
 
@@ -383,6 +568,16 @@ public enum ServerError: Error, LocalizedError {
         case .message(let value):
             return value
         }
+    }
+}
+
+extension String {
+    func dropLeadingSlash() -> String {
+        hasPrefix("/") ? String(dropFirst()) : self
+    }
+
+    fileprivate var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
 

@@ -16,10 +16,35 @@ RESOURCES_DIR="$CONTENTS_DIR/Resources"
 INFO_PLIST="$ROOT_DIR/Bundle/MacOSAppInfo.plist"
 ENTITLEMENTS="$ROOT_DIR/Bundle/Lolabunny.entitlements"
 ICON_SOURCE="$ROOT_DIR/bunny.png"
-CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
 VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/.version")"
 DMG_PATH="$BUILD_DIR/lolabunny-macos-app@$VERSION.dmg"
 export CLANG_MODULE_CACHE_PATH="${CLANG_MODULE_CACHE_PATH:-$ROOT_DIR/.build/clang-module-cache}"
+
+resolve_codesign_identity() {
+    if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+        printf '%s\n' "$CODESIGN_IDENTITY"
+        return
+    fi
+
+    local identity=""
+    identity="$(security find-identity -v -p codesigning 2>/dev/null \
+        | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' \
+        | head -n 1)"
+    if [[ -z "$identity" ]]; then
+        identity="$(security find-identity -v -p codesigning 2>/dev/null \
+            | sed -n 's/.*"\(Apple Development: .*\)"/\1/p' \
+            | head -n 1)"
+    fi
+    if [[ -z "$identity" ]]; then
+        identity="$(security find-identity -v -p codesigning 2>/dev/null \
+            | sed -n 's/.*"\(Mac Developer: .*\)"/\1/p' \
+            | head -n 1)"
+    fi
+
+    printf '%s\n' "${identity:--}"
+}
+
+CODESIGN_IDENTITY="$(resolve_codesign_identity)"
 
 require_file() {
     local path="$1"
@@ -151,10 +176,17 @@ iconutil --convert icns "$iconset_dir" --output "$RESOURCES_DIR/AppIcon.icns"
 rm -rf "$iconset_dir"
 
 echo "Signing with identity: $CODESIGN_IDENTITY"
-codesign --force --deep \
-    --sign "$CODESIGN_IDENTITY" \
-    --entitlements "$ENTITLEMENTS" \
-    "$APP_BUNDLE"
+codesign_args=(
+    --force
+    --deep
+    --sign "$CODESIGN_IDENTITY"
+    --entitlements "$ENTITLEMENTS"
+)
+if [[ "$CODESIGN_IDENTITY" != "-" ]]; then
+    codesign_args+=(--options runtime --timestamp)
+fi
+codesign "${codesign_args[@]}" "$APP_BUNDLE"
+codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 
 mkdir -p "$DMG_STAGING_DIR"
 cp -R "$APP_BUNDLE" "$DMG_STAGING_DIR/$APP_NAME.app"

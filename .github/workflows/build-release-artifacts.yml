@@ -159,27 +159,23 @@ jobs:
 
       - name: Import signing certificate
         if: env.MACOS_CERTIFICATE != '' && env.MACOS_CERTIFICATE_PWD != ''
-        env:
-          KEYCHAIN_PWD: ${{ github.run_id }}
-        run: |
-          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "$KEYCHAIN_PWD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain
-          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
-          rm certificate.p12
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
+          p12-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
 
       - name: Build app bundle and DMG
         run: bash scripts/build-release-macos-app.sh
 
-      - name: Notarize macOS app
+      - name: Notarize and staple macOS app
         if: env.APPLE_ID != ''
-        run: |
-          ditto -c -k --keepParent ".build/lolabunny-macos-app-release/bundle/Lolabunny.app" Lolabunny.zip
-          xcrun notarytool submit Lolabunny.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PWD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple ".build/lolabunny-macos-app-release/bundle/Lolabunny.app"
-          rm Lolabunny.zip
+        uses: love-actions/xcode-notarizer@v1
+        with:
+          product-path: .build/lolabunny-macos-app-release/bundle/Lolabunny.app
+          apple-id: ${{ secrets.APPLE_ID }}
+          app-password: ${{ secrets.APPLE_ID_PWD }}
+          team-id: ${{ secrets.APPLE_TEAM_ID }}
+          staple: true
 
       - name: Rebuild DMG after stapling
         if: env.APPLE_ID != ''

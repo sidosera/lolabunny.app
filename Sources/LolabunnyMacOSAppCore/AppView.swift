@@ -4,7 +4,6 @@ import SwiftUI
 
 public struct AppView: View {
     @ObservedObject var app: AppDelegate
-    @ObservedObject private var interceptor = TextInterceptor.shared
 
     public init(app: AppDelegate) {
         self.app = app
@@ -19,18 +18,10 @@ public struct AppView: View {
             }
             .disabled(!app.canOpenBindings)
 
-            Button("\(Config.Menu.openSearch)  \(Config.CommandPalette.hotKeyLabel)") {
-                app.openCommandPalette()
-            }
-
             Toggle(Config.Menu.launchAtLogin, isOn: Binding(
                 get: { app.enableLaunchAtLogin },
                 set: { app.setLaunchAtLogin(enabled: $0) }
             ))
-
-            Divider()
-
-            interceptorSection
 
             Divider()
 
@@ -41,21 +32,6 @@ public struct AppView: View {
         .onAppear {
             app.startIfNeeded()
             app.refreshServerSetupUI()
-            interceptor.refreshPermissionStatus()
-        }
-    }
-
-    @ViewBuilder
-    private var interceptorSection: some View {
-        Toggle("Text Interceptor  ⇧⌘L", isOn: Binding(
-            get: { interceptor.isEnabled },
-            set: { interceptor.isEnabled = $0 }
-        ))
-
-        if !interceptor.accessibilityGranted {
-            Button("Grant Accessibility Access") {
-                interceptor.requestAccessibilityPermission()
-            }
         }
     }
 
