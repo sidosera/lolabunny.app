@@ -29,7 +29,7 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LolabunnyServerPort</key>
-    <string>8085</string>
+    <string>18085</string>
     <key>LolabunnyServerAddress</key>
     <string>127.0.0.1</string>
     <key>LolabunnyServerLogLevel</key>

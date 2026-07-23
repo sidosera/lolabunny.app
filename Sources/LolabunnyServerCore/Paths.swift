@@ -1,7 +1,9 @@
 import Foundation
 
 public enum Paths {
-    static let appPrefix = "bunnylol"
+    static let appDirectoryName = ".lolabunny"
+    static let legacyAppDirectoryName = "bunnylol"
+    static let homebrewShareDirectoryNames = ["lolabunny", legacyAppDirectoryName]
 
     public static var runtimeDirectory: URL {
         let directory = FileManager.default.temporaryDirectory
@@ -20,12 +22,16 @@ public enum Paths {
             return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath, isDirectory: true)
         }
 
-        return FileManager.default.homeDirectoryForCurrentUser
+        return homeDirectory
             .appendingPathComponent(".local/share", isDirectory: true)
     }
 
     public static var appDataHome: URL {
-        dataHome.appendingPathComponent(appPrefix, isDirectory: true)
+        dataHome.appendingPathComponent(appDirectoryName, isDirectory: true)
+    }
+
+    public static var legacyAppDataHome: URL {
+        dataHome.appendingPathComponent(legacyAppDirectoryName, isDirectory: true)
     }
 
     public static var historyFile: URL {
@@ -35,7 +41,8 @@ public enum Paths {
     public static var defaultVolumeDirectory: URL {
         let root = appDataHome
         let volume = root.appendingPathComponent("volume", isDirectory: true)
-        let legacyVault = root.appendingPathComponent("vault", isDirectory: true)
+        let legacyRoot = legacyAppDataHome
+        let legacyVault = legacyRoot.appendingPathComponent("vault", isDirectory: true)
         if FileManager.default.fileExists(atPath: volume.path)
             || !FileManager.default.fileExists(atPath: legacyVault.path) {
             return volume
@@ -91,29 +98,64 @@ public enum Paths {
                 .appendingPathComponent("commands", isDirectory: true)
         )
 
+        let homeAppDirectory = homeDirectory.appendingPathComponent(appDirectoryName, isDirectory: true)
+        candidates.append(homeAppDirectory)
+        candidates.append(homeAppDirectory.appendingPathComponent("commands", isDirectory: true))
         candidates.append(appDataHome.appendingPathComponent("commands", isDirectory: true))
+        candidates.append(legacyAppDataHome.appendingPathComponent("commands", isDirectory: true))
 
         for prefix in ["/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"] {
             let root = URL(fileURLWithPath: prefix, isDirectory: true)
             let brew = root.appendingPathComponent("bin/brew")
             if FileManager.default.isExecutableFile(atPath: brew.path) {
-                candidates.append(
-                    root.appendingPathComponent("share", isDirectory: true)
-                        .appendingPathComponent(appPrefix, isDirectory: true)
-                        .appendingPathComponent("commands", isDirectory: true)
-                )
+                for directoryName in homebrewShareDirectoryNames {
+                    candidates.append(
+                        root.appendingPathComponent("share", isDirectory: true)
+                            .appendingPathComponent(directoryName, isDirectory: true)
+                            .appendingPathComponent("commands", isDirectory: true)
+                    )
+                }
             }
         }
 
         var seen = Set<String>()
-        return candidates.compactMap { url in
+        return candidates.flatMap { commandDirectoryCandidates(from: $0) }.compactMap { url in
             let path = url.standardizedFileURL.path
             guard seen.insert(path).inserted,
-                  FileManager.default.fileExists(atPath: path) else {
+                  isDirectory(at: url) else {
                 return nil
             }
             return URL(fileURLWithPath: path, isDirectory: true)
         }
+    }
+
+    private static func commandDirectoryCandidates(from url: URL) -> [URL] {
+        guard isDirectory(at: url) else {
+            return [url]
+        }
+
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        let childDirectories = children.filter { isDirectory(at: $0) }
+
+        return [url] + childDirectories.map { $0.resolvingSymlinksInPath() }
+    }
+
+    private static func isDirectory(at url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    private static var homeDirectory: URL {
+        if let raw = ProcessInfo.processInfo.environment["HOME"],
+           !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
     }
 
     private static func versionFileCandidates() -> [URL] {

@@ -51,7 +51,7 @@ I don't have Apple Developer account so I can't distribute a notarized app. By d
 xattr -cr /Applications/Lolabunny.app
 ```
 
-Toggle `Launch at Login` and allow the app to be added to startup folder and set your browser search engine to: `http://localhost:8085/?cmd=%s` (e.g. guide for [Google Chrome](https://support.google.com/chrome/answer/95426)).
+Toggle `Launch at Login` and allow the app to be added to startup folder and set your browser search engine to: `http://localhost:18085/?cmd=%s` (e.g. guide for [Google Chrome](https://support.google.com/chrome/answer/95426)).
 
 <p align="center">
   <img src="launch-at-login.png" alt="Bunnylol" width="1096" height="358">

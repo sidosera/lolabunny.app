@@ -149,6 +149,15 @@ public struct HTTPResponse {
         )
     }
 
+    public static func json(_ json: String) -> HTTPResponse {
+        HTTPResponse(
+            statusCode: 200,
+            reason: "OK",
+            headers: ["Content-Type": "application/json; charset=utf-8"],
+            body: Data(json.utf8)
+        )
+    }
+
     public static func redirect(to location: String) -> HTTPResponse {
         HTTPResponse(
             statusCode: 302,
@@ -166,6 +175,7 @@ public final class SimpleHTTPServer: @unchecked Sendable {
     private let port: UInt16
     private let maxBodyBytes: Int
     private let handler: Handler
+    private let clientQueue = DispatchQueue(label: "lolabunny.http.clients", qos: .userInitiated, attributes: .concurrent)
 
     public init(
         address: String,
@@ -226,9 +236,21 @@ public final class SimpleHTTPServer: @unchecked Sendable {
                 continue
             }
 
-            handleClient(clientFD)
-            close(clientFD)
+            configureClientSocket(clientFD)
+            clientQueue.async { [self] in
+                handleClient(clientFD)
+                close(clientFD)
+            }
         }
+    }
+
+    private func configureClientSocket(_ fd: Int32) {
+        var noSIGPipe: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSIGPipe, socklen_t(MemoryLayout<Int32>.size))
+
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
     }
 
     private func handleClient(_ fd: Int32) {
@@ -300,6 +322,14 @@ public final class HTTPServer {
         switch (request.method, request.path) {
         case ("GET", "/health"):
             return .text(Paths.versionString())
+        case ("GET", "/api/commands"):
+            return .json(commandsJSON(router: router))
+        case ("GET", "/api/resolve"):
+            return resolveCommandRequest(request, router: router, config: config)
+        case ("GET", "/api/suggest"):
+            return suggestCommandArguments(request, router: router)
+        case ("GET", "/api/search-suggestions"), ("GET", "/suggest"):
+            return suggestSearchTerms(request, router: router)
         case ("GET", "/"):
             return handleCommandRequest(request, router: router, config: config)
         default:
@@ -319,40 +349,197 @@ public final class HTTPServer {
         return .redirect(to: location)
     }
 
+    private static func resolveCommandRequest(_ request: HTTPRequest, router: CommandRouter, config: AppConfig) -> HTTPResponse {
+        let query = request.query["cmd"] ?? ""
+        let location = router.route(query, config: config)
+        return .json("""
+        {"query":\(jsonString(query)),"location":\(jsonString(location)),"kind":\(jsonString(locationKind(location)))}
+        """)
+    }
+
+    private static func suggestCommandArguments(_ request: HTTPRequest, router: CommandRouter) -> HTTPResponse {
+        let binding = request.query["cmd"] ?? ""
+        let query = request.query["q"] ?? ""
+        guard let command = router.allCommands().first(where: { command in
+            command.bindings.contains { $0.caseInsensitiveCompare(binding) == .orderedSame }
+        }), let template = command.suggestURL else {
+            return .json("[]")
+        }
+
+        let encoded = percentEncode(query)
+        guard let url = URL(string: template.replacingOccurrences(of: "%s", with: encoded)),
+              let data = try? syncHTTPGet(url),
+              let suggestions = parseSuggestionPayload(data) else {
+            return .json("[]")
+        }
+        return .json("[\(suggestions.prefix(8).map(jsonString).joined(separator: ","))]")
+    }
+
+    private static func suggestSearchTerms(_ request: HTTPRequest, router: CommandRouter) -> HTTPResponse {
+        let query = request.query["q"] ?? request.query["searchTerms"] ?? ""
+        let suggestions = searchSuggestions(for: query, router: router)
+        return .json("[\(jsonString(query)),[\(suggestions.map(jsonString).joined(separator: ","))]]")
+    }
+
     private static func bindingsHTML(router: CommandRouter) -> String {
-        let rows = router.allCommands().map { command in
+        let commands = router.allCommands()
+        let rows = commands.map { command in
             let binding = htmlEscape(command.bindings.first ?? "")
             let aliases = htmlEscape(command.bindings.dropFirst().joined(separator: ", "))
             let description = htmlEscape(command.description)
-            return "<tr><td>\(binding)</td><td>\(aliases)</td><td>\(description)</td></tr>"
+            let example = htmlEscape(command.example)
+            let search = htmlAttributeEscape(
+                ([command.bindings.joined(separator: " "), command.description, command.example, command.origin])
+                    .joined(separator: " ")
+                    .lowercased()
+            )
+            let aliasHTML = aliases.isEmpty ? "" : "<span class=\"alias\">\(aliases)</span>"
+            return """
+            <li data-cmd="\(search)">
+            <div class="row">
+            <span class="cmd">\(binding)</span>
+            <span class="desc">\(description)\(aliasHTML)<span class="example">\(example)</span></span>
+            </div>
+            </li>
+            """
         }.joined(separator: "\n")
 
-        return """
-        <!doctype html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Lolabunny</title>
-          <style>
-            body { font: 14px -apple-system, BlinkMacSystemFont, sans-serif; margin: 32px; color: #1f2328; }
-            table { border-collapse: collapse; width: min(960px, 100%); }
-            th, td { border-bottom: 1px solid #d8dee4; padding: 8px 10px; text-align: left; }
-            th { color: #57606a; font-weight: 600; }
-          </style>
-        </head>
-        <body>
-          <h1>Lolabunny</h1>
-          <table>
-            <thead><tr><th>Command</th><th>Aliases</th><th>Description</th></tr></thead>
-            <tbody>
-              \(rows)
-            </tbody>
-          </table>
-        </body>
-        </html>
-        """
+        return bindingsTemplate()
+            .replacingOccurrences(of: "__LOGO__", with: logoBase64())
+            .replacingOccurrences(of: "__COMMAND_COUNT__", with: "\(commands.count)")
+            .replacingOccurrences(of: "__COMMAND_ROWS__", with: rows)
+            .replacingOccurrences(of: "__COMMANDS_JSON__", with: commandsJSON(router: router))
+            .replacingOccurrences(of: "__VERSION__", with: htmlEscape(Paths.versionString()))
     }
 
+}
+
+func commandsJSON(router: CommandRouter) -> String {
+    let commands = router.allCommands().map { command in
+        """
+        {"bindings":[\(command.bindings.map(jsonString).joined(separator: ","))],"description":\(jsonString(command.description)),"example":\(jsonString(command.example)),"origin":\(jsonString(command.origin)),"suggestURL":\(command.suggestURL.map(jsonString) ?? "null")}
+        """
+    }
+    return "[\(commands.joined(separator: ","))]"
+}
+
+func searchSuggestions(for rawQuery: String, router: CommandRouter) -> [String] {
+    let query = rawQuery
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .dropLeadingSlash()
+    let commands = router.allCommands()
+
+    guard !query.isEmpty else {
+        return deduplicatedSuggestions(commands.compactMap(\.example).filter { !$0.isEmpty })
+    }
+
+    let binding = commandName(from: query).lowercased()
+    let commandArguments = arguments(after: binding, in: query)
+
+    if let command = commands.first(where: { command in
+        command.bindings.contains { $0.caseInsensitiveCompare(binding) == .orderedSame }
+    }) {
+        let primary = command.bindings.first ?? binding
+        var suggestions: [String] = []
+        if commandArguments.isEmpty, !command.example.isEmpty {
+            suggestions.append(command.example)
+        }
+        suggestions.append(contentsOf: remoteArgumentSuggestions(for: command, query: commandArguments).map { suggestion in
+            let trimmed = suggestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            let alreadyComplete = command.bindings.contains { commandBinding in
+                trimmed.caseInsensitiveCompare(commandBinding) == .orderedSame
+                    || trimmed.lowercased().hasPrefix(commandBinding.lowercased() + " ")
+            }
+            return alreadyComplete ? trimmed : "\(primary) \(trimmed)"
+        })
+        return deduplicatedSuggestions(suggestions)
+    }
+
+    let matches = commands.filter { command in
+        command.bindings.contains { $0.lowercased().hasPrefix(binding) }
+            || command.description.lowercased().contains(binding)
+            || command.example.lowercased().contains(binding)
+    }
+    return deduplicatedSuggestions(matches.compactMap { command in
+        if !command.example.isEmpty {
+            return command.example
+        }
+        guard let primary = command.bindings.first else {
+            return nil
+        }
+        return primary + " "
+    })
+}
+
+func remoteArgumentSuggestions(for command: CommandInfo, query: String) -> [String] {
+    guard let template = command.suggestURL,
+          !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        return []
+    }
+
+    let encoded = percentEncode(query)
+    guard let url = URL(string: template.replacingOccurrences(of: "%s", with: encoded)),
+          let data = try? syncHTTPGet(url),
+          let suggestions = parseSuggestionPayload(data) else {
+        return []
+    }
+    return Array(suggestions.prefix(8))
+}
+
+func deduplicatedSuggestions(_ suggestions: [String], limit: Int = 8) -> [String] {
+    var seen = Set<String>()
+    var results: [String] = []
+    for suggestion in suggestions {
+        let trimmed = suggestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              seen.insert(trimmed.lowercased()).inserted else {
+            continue
+        }
+        results.append(trimmed)
+        if results.count == limit {
+            break
+        }
+    }
+    return results
+}
+
+func locationKind(_ location: String) -> String {
+    if location.hasPrefix("data:text/plain") {
+        return "text"
+    }
+    if location.hasPrefix("http://") || location.hasPrefix("https://") {
+        return "url"
+    }
+    return "raw"
+}
+
+func parseSuggestionPayload(_ data: Data) -> [String]? {
+    guard let object = try? JSONSerialization.jsonObject(with: data) else {
+        return nil
+    }
+    if let values = object as? [String] {
+        return values
+    }
+    if let values = object as? [Any], values.count > 1, let suggestions = values[1] as? [String] {
+        return suggestions
+    }
+    return nil
+}
+
+func bindingsTemplate() -> String {
+    guard let url = Bundle.module.url(forResource: "BindingsPage", withExtension: "html"),
+          let template = try? String(contentsOf: url, encoding: .utf8) else {
+        return "<!doctype html><html><body>__COMMAND_ROWS__</body></html>"
+    }
+    return template
+}
+
+func logoBase64() -> String {
+    guard let url = Bundle.module.url(forResource: "bunny", withExtension: "png"),
+          let data = try? Data(contentsOf: url) else {
+        return ""
+    }
+    return data.base64EncodedString()
 }
 
 func htmlEscape(_ value: String) -> String {
@@ -361,4 +548,36 @@ func htmlEscape(_ value: String) -> String {
         .replacingOccurrences(of: "<", with: "&lt;")
         .replacingOccurrences(of: ">", with: "&gt;")
         .replacingOccurrences(of: "\"", with: "&quot;")
+}
+
+func htmlAttributeEscape(_ value: String) -> String {
+    htmlEscape(value).replacingOccurrences(of: "'", with: "&#39;")
+}
+
+func jsonString(_ value: String) -> String {
+    var result = "\""
+    for scalar in value.unicodeScalars {
+        switch scalar.value {
+        case 0x22:
+            result += "\\\""
+        case 0x5C:
+            result += "\\\\"
+        case 0x08:
+            result += "\\b"
+        case 0x0C:
+            result += "\\f"
+        case 0x0A:
+            result += "\\n"
+        case 0x0D:
+            result += "\\r"
+        case 0x09:
+            result += "\\t"
+        case 0x00...0x1F:
+            result += String(format: "\\u%04X", scalar.value)
+        default:
+            result.unicodeScalars.append(scalar)
+        }
+    }
+    result += "\""
+    return result
 }

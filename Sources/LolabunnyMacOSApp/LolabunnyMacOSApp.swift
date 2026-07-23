@@ -1,4 +1,5 @@
 import Darwin
+import Foundation
 import LolabunnyMacOSAppCore
 import LolabunnyServerCore
 import SwiftUI
@@ -37,12 +38,17 @@ private final class EmbeddedServer: @unchecked Sendable {
         signal(SIGPIPE, SIG_IGN)
 
         let address = bundleString("LolabunnyServerAddress") ?? "127.0.0.1"
-        let port = UInt16(bundleString("LolabunnyServerPort") ?? "") ?? 8_085
+        let port = UInt16(bundleString("LolabunnyServerPort") ?? "") ?? 18_085
         let version = Paths.versionString()
 
         setenv("LOLABUNNY_SERVER_ADDRESS", address, 1)
         setenv("LOLABUNNY_SERVER_PORT", "\(port)", 1)
         setenv("LOLABUNNY_SERVER_VERSION", version, 1)
+
+        if let existingVersion = probeExistingServer(address: address, port: port) {
+            log("using existing lolabunny-server: \(existingVersion) at http://\(address):\(port)")
+            return
+        }
 
         queue.async {
             var config = AppConfig()
@@ -66,6 +72,51 @@ private final class EmbeddedServer: @unchecked Sendable {
                 log("embedded lolabunny-server failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    private func probeExistingServer(address: String, port: UInt16) -> String? {
+        guard let url = URL(string: "http://\(address):\(port)/health") else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 0.75
+
+        let semaphore = DispatchSemaphore(value: 0)
+        let result = ServerProbeResult()
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            defer { semaphore.signal() }
+            guard let http = response as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  let data,
+                  let version = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !version.isEmpty else {
+                return
+            }
+            result.set(version)
+        }.resume()
+
+        _ = semaphore.wait(timeout: .now() + 1)
+        return result.value()
+    }
+}
+
+private final class ServerProbeResult: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: String?
+
+    func set(_ value: String) {
+        lock.lock()
+        storage = value
+        lock.unlock()
+    }
+
+    func value() -> String? {
+        lock.lock()
+        let value = storage
+        lock.unlock()
+        return value
     }
 }
 

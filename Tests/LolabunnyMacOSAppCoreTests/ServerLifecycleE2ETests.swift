@@ -7,6 +7,7 @@ final class ServerLifecycleE2ETests: XCTestCase {
     func testServerHandlesHealthAndRedirects() async throws {
         try await withE2ESandbox { sandbox in
             let binary = try sandbox.buildServerBinary()
+            try sandbox.writeSymlinkedHomeCommandPackage()
             let version = try sandbox.serverVersion(binary)
             let process = try sandbox.launchServer(binary)
             defer { sandbox.terminate(process) }
@@ -15,6 +16,19 @@ final class ServerLifecycleE2ETests: XCTestCase {
 
             let redirect = try await sandbox.redirectLocation(for: "lower MiXeD Value")
             XCTAssertEqual(redirect, "data:text/plain;charset=utf-8,mixed%20value")
+
+            let bindings = try await sandbox.bindingsHTML()
+            XCTAssertTrue(bindings.contains("<span class=\"cmd\">homecmd</span>"), bindings)
+            XCTAssertTrue(bindings.contains("Home command"), bindings)
+
+            let homeRedirect = try await sandbox.redirectLocation(for: "homecmd hello world")
+            XCTAssertEqual(homeRedirect, "https://example.test/hello%20world")
+
+            let resolved = try await sandbox.resolvedLocation(for: "homecmd hello world")
+            XCTAssertEqual(resolved, "https://example.test/hello%20world")
+
+            let suggestions = try await sandbox.searchSuggestions(for: "home")
+            XCTAssertEqual(suggestions, ["homecmd example"])
         }
     }
 }
@@ -31,6 +45,7 @@ private func withE2ESandbox(
 @MainActor
 private final class E2ESandbox {
     let root: URL
+    let fakeHomeDir: URL
     let dataRoot: URL
     let volumeDir: URL
     let port: UInt16
@@ -39,10 +54,12 @@ private final class E2ESandbox {
         let fm = FileManager.default
         root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("lolabunny-e2e-\(UUID().uuidString)", isDirectory: true)
+        fakeHomeDir = root.appendingPathComponent("home", isDirectory: true)
         dataRoot = root.appendingPathComponent("data", isDirectory: true)
         volumeDir = root.appendingPathComponent("volume", isDirectory: true)
         port = try Self.availablePort()
 
+        try fm.createDirectory(at: fakeHomeDir, withIntermediateDirectories: true)
         try fm.createDirectory(at: dataRoot, withIntermediateDirectories: true)
         try fm.createDirectory(at: volumeDir, withIntermediateDirectories: true)
     }
@@ -92,6 +109,40 @@ private final class E2ESandbox {
         return URL(fileURLWithPath: binPath).appendingPathComponent("lolabunny-server")
     }
 
+    func writeSymlinkedHomeCommandPackage() throws {
+        guard fakeHomeDir.path.hasPrefix(root.path + "/") else {
+            throw E2EError("refusing to write outside e2e sandbox: \(fakeHomeDir.path)")
+        }
+        let commandsRoot = fakeHomeDir
+            .appendingPathComponent(".lolabunny", isDirectory: true)
+            .appendingPathComponent("commands", isDirectory: true)
+        let packageSource = root
+            .appendingPathComponent("package-source", isDirectory: true)
+            .appendingPathComponent("lola-core", isDirectory: true)
+        try FileManager.default.createDirectory(at: commandsRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: packageSource, withIntermediateDirectories: true)
+        let command = """
+        function process(full_args)
+          return "https://example.test/" .. url_encode(get_args(full_args, "homecmd"))
+        end
+
+        return {
+          bindings = { "homecmd", "hc" },
+          description = "Home command",
+          example = "homecmd example"
+        }
+        """
+        try command.write(
+            to: packageSource.appendingPathComponent("homecmd.lua"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try FileManager.default.createSymbolicLink(
+            at: commandsRoot.appendingPathComponent("lola-core"),
+            withDestinationURL: packageSource
+        )
+    }
+
     func serverVersion(_ binary: URL) throws -> String {
         try run(
             binary,
@@ -111,6 +162,7 @@ private final class E2ESandbox {
             "--volume-path", volumeDir.path,
         ]
         process.environment = ProcessInfo.processInfo.environment.merging([
+            "HOME": fakeHomeDir.path,
             "XDG_DATA_HOME": dataRoot.path,
             "TMPDIR": root.path,
         ]) { _, new in new }
@@ -165,6 +217,43 @@ private final class E2ESandbox {
             throw E2EError("expected redirect response")
         }
         return location
+    }
+
+    func bindingsHTML() async throws -> String {
+        let (data, response) = try await URLSession.shared.data(from: serverBaseURL)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw E2EError("expected bindings page")
+        }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    func resolvedLocation(for command: String) async throws -> String {
+        var components = URLComponents(url: serverBaseURL.appendingPathComponent("api/resolve"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "cmd", value: command)]
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw E2EError("expected resolve response")
+        }
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let location = object?["location"] as? String else {
+            throw E2EError("resolve response did not include location")
+        }
+        return location
+    }
+
+    func searchSuggestions(for query: String) async throws -> [String] {
+        var components = URLComponents(url: serverBaseURL.appendingPathComponent("api/search-suggestions"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw E2EError("expected search suggestions response")
+        }
+        guard let payload = try JSONSerialization.jsonObject(with: data) as? [Any],
+              payload.count >= 2,
+              let suggestions = payload[1] as? [String] else {
+            throw E2EError("search suggestions response did not include suggestions")
+        }
+        return suggestions
     }
 
     private var serverBaseURL: URL {
