@@ -527,7 +527,8 @@ func parseSuggestionPayload(_ data: Data) -> [String]? {
 }
 
 func bindingsTemplate() -> String {
-    guard let url = Bundle.module.url(forResource: "BindingsPage", withExtension: "html"),
+    let bundle = ModuleResources.bundle(named: "Lolabunny_LolabunnyServerCore")
+    guard let url = bundle.url(forResource: "BindingsPage", withExtension: "html"),
           let template = try? String(contentsOf: url, encoding: .utf8) else {
         return "<!doctype html><html><body>__COMMAND_ROWS__</body></html>"
     }
@@ -535,7 +536,8 @@ func bindingsTemplate() -> String {
 }
 
 func logoBase64() -> String {
-    guard let url = Bundle.module.url(forResource: "bunny", withExtension: "png"),
+    let bundle = ModuleResources.bundle(named: "Lolabunny_LolabunnyServerCore")
+    guard let url = bundle.url(forResource: "bunny", withExtension: "png"),
           let data = try? Data(contentsOf: url) else {
         return ""
     }

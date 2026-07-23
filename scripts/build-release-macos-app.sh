@@ -56,6 +56,16 @@ require_file() {
     fi
 }
 
+require_path() {
+    local path="$1"
+    local label="$2"
+
+    if [[ ! -e "$path" ]]; then
+        echo "$label not found: $path" >&2
+        exit 1
+    fi
+}
+
 triple_for_arch() {
     local arch="$1"
 
@@ -141,6 +151,17 @@ create_universal_binary "$APP_EXECUTABLE" "$MACOS_DIR/$APP_EXECUTABLE"
 strip "$MACOS_DIR/$APP_EXECUTABLE"
 cp "$INFO_PLIST" "$CONTENTS_DIR/Info.plist"
 printf 'APPL????' > "$CONTENTS_DIR/PkgInfo"
+
+# SwiftPM resource bundles must live under Contents/Resources for a sealed .app.
+arm64_bin_dir="$(show_bin_path "$APP_EXECUTABLE" arm64)"
+for resource_bundle in \
+    Lolabunny_LolabunnyMacOSAppCore.bundle \
+    Lolabunny_LolabunnyServerCore.bundle
+do
+    require_path "$arm64_bin_dir/$resource_bundle" "SwiftPM resource bundle"
+    rm -rf "$RESOURCES_DIR/$resource_bundle"
+    cp -R "$arm64_bin_dir/$resource_bundle" "$RESOURCES_DIR/$resource_bundle"
+done
 
 if [[ -f "$ROOT_DIR/.version" ]]; then
     cp "$ROOT_DIR/.version" "$RESOURCES_DIR/.version"
