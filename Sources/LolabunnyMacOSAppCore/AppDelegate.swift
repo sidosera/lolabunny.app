@@ -28,9 +28,12 @@ public final class AppDelegate: NSObject, ObservableObject {
         refreshServerSetupUI()
         configureNotificationActions()
         if Bundle.main.bundleIdentifier != nil {
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) {
-                granted, error in
-                log("notification auth: granted=\(granted) error=\(String(describing: error))")
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { @Sendable granted, error in
+                let message =
+                    "notification auth: granted=\(granted) error=\(String(describing: error))"
+                Task { @MainActor in
+                    log(message)
+                }
             }
         }
         Task {

@@ -39,11 +39,15 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         log("posting notification: \(title) – \(body)")
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                log("notification error: \(error.localizedDescription)")
+        UNUserNotificationCenter.current().add(request) { @Sendable error in
+            let message: String
+            if let error {
+                message = "notification error: \(error.localizedDescription)"
             } else {
-                log("notification posted ok")
+                message = "notification posted ok"
+            }
+            Task { @MainActor in
+                log(message)
             }
         }
     }
